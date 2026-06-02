@@ -1,0 +1,152 @@
+{
+  "version": "8.2_reg_tps",
+  "slide_id": "3_17_e5ecd251-609b-7ca5-cdcf-12a76adc70de_160012",
+  "method": "auto_orientation_v8.2_partial_v8.1_registered",
+  "algorithm": "hybrid v8.2 (precision/IoU auto-switch + border removal)",
+  "coverage_mode": "partial_v8.1",
+  "original_sizes": {
+    "he": [
+      75344,
+      66533
+    ],
+    "cosmx": [
+      37745,
+      25000
+    ],
+    "size_ratio": 0.4383611374494011
+  },
+  "transform": {
+    "rotation": 90,
+    "flipX": true,
+    "flipY": false,
+    "translateX": 0.3662109375,
+    "translateY": 0.10951327433628319,
+    "translateX_pixels": 375,
+    "translateY_pixels": 99,
+    "scale": 0.8484900000000003
+  },
+  "detection": {
+    "combined_score": 0.4020463541182174,
+    "match_score": 0.46682223677635193,
+    "iou_score": 0.35698924730526627,
+    "detection_scale": 0.7,
+    "processing_size": 1024,
+    "top_candidates": [
+      {
+        "rotation": 90,
+        "flipX": true,
+        "flipY": false,
+        "scale": 0.7,
+        "score": 0.402,
+        "position": [
+          415,
+          188
+        ]
+      },
+      {
+        "rotation": 270,
+        "flipX": false,
+        "flipY": true,
+        "scale": 0.7,
+        "score": 0.402,
+        "position": [
+          415,
+          188
+        ]
+      },
+      {
+        "rotation": 90,
+        "flipX": false,
+        "flipY": true,
+        "scale": 0.6,
+        "score": 0.3212,
+        "position": [
+          65,
+          122
+        ]
+      },
+      {
+        "rotation": 270,
+        "flipX": true,
+        "flipY": false,
+        "scale": 0.6,
+        "score": 0.3212,
+        "position": [
+          65,
+          122
+        ]
+      },
+      {
+        "rotation": 90,
+        "flipX": false,
+        "flipY": false,
+        "scale": 0.7,
+        "score": 0.3142,
+        "position": [
+          320,
+          188
+        ]
+      }
+    ]
+  },
+  "registration": {
+    "initial_score": 0.4020463541182174,
+    "final_score": 0.4739407328637401,
+    "coarse_search": "dx\u00b115% dy\u00b115% scale\u00b125%",
+    "fine_search": "dx\u00b14%  dy\u00b14%  scale\u00b18%",
+    "micro_search": "dx\u00b115px dy\u00b115px scale\u00b12%"
+  },
+  "tps_registration": {
+    "n_control_points": 5,
+    "he_control_points": [
+      [
+        537.4207857398966,
+        669.1202171797368
+      ],
+      [
+        704.8019815059445,
+        705.9804491413474
+      ],
+      [
+        812.4108713029576,
+        675.1886490807354
+      ],
+      [
+        535.439247311828,
+        208.5274193548387
+      ],
+      [
+        900.6976421636616,
+        692.252427184466
+      ]
+    ],
+    "cx_control_points": [
+      [
+        572.8117267857989,
+        679.5868843911456
+      ],
+      [
+        585.744163104242,
+        860.2476159158172
+      ],
+      [
+        764.1458823529412,
+        664.8258823529412
+      ],
+      [
+        577.9983739837398,
+        209.34926829268292
+      ],
+      [
+        894.9327972429638,
+        733.7145318782309
+      ]
+    ],
+    "scores": {
+      "iou": 0.1625,
+      "precision": 0.338,
+      "recall": 0.2383,
+      "f1": 0.2796
+    }
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "version": "8.2_reg_elastic",
+  "slide_id": "3_13_fc7e338b-417c-0b22-4786-f43048459ceb_155215",
+  "method": "auto_orientation_v8.2_partial_v8.1_registered_elastic",
+  "algorithm": "hybrid v8.2 (precision/IoU auto-switch + border removal)",
+  "coverage_mode": "partial_v8.1",
+  "original_sizes": {
+    "he": [
+      107184,
+      83955
+    ],
+    "cosmx": [
+      37745,
+      25000
+    ],
+    "size_ratio": 0.32496500618373947
+  },
+  "transform": {
+    "rotation": 90,
+    "flipX": false,
+    "flipY": false,
+    "translateX": 0.5171065493646139,
+    "translateY": 0.14481897627965043,
+    "translateX_pixels": 529,
+    "translateY_pixels": 116,
+    "scale": 0.5567089184999998
+  },
+  "detection": {
+    "combined_score": 0.31952431391900465,
+    "match_score": 0.2675389349460602,
+    "iou_score": 0.465336667640428,
+    "detection_scale": 0.65,
+    "processing_size": 1024,
+    "top_candidates": [
+      {
+        "rotation": 90,
+        "flipX": false,
+        "flipY": false,
+        "scale": 0.65,
+        "score": 0.3195,
+        "position": [
+          504,
+          73
+        ]
+      },
+      {
+        "rotation": 270,
+        "flipX": true,
+        "flipY": true,
+        "scale": 0.65,
+        "score": 0.3195,
+        "position": [
+          504,
+          73
+        ]
+      },
+      {
+        "rotation": 0,
+        "flipX": true,
+        "flipY": true,
+        "scale": 0.55,
+        "score": 0.3052,
+        "position": [
+          440,
+          343
+        ]
+      },
+      {
+        "rotation": 180,
+        "flipX": false,
+        "flipY": false,
+        "scale": 0.55,
+        "score": 0.3052,
+        "position": [
+          440,
+          343
+        ]
+      },
+      {
+        "rotation": 0,
+        "flipX": false,
+        "flipY": true,
+        "scale": 0.5,
+        "score": 0.2906,
+        "position": [
+          346,
+          66
+        ]
+      }
+    ]
+  },
+  "registration": {
+    "initial_score": 0.31952431391900465,
+    "final_score": 0.5523151104426092,
+    "coarse_search": "dx\u00b115% dy\u00b115% scale\u00b125%",
+    "fine_search": "dx\u00b14%  dy\u00b14%  scale\u00b18%",
+    "micro_search": "dx\u00b115px dy\u00b115px scale\u00b12%"
+  },
+  "registration_elastic": {
+    "rigid_scale": 0.5567089184999998,
+    "rigid_dx": 529,
+    "rigid_dy": 116,
+    "rigid_score": 0.54964698380435,
+    "elastic": "none",
+    "mesh_size": 8,
+    "coverage_ratio": 0.4460489700409009
+  }
+}
