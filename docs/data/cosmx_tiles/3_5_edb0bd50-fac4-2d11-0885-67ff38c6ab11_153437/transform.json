@@ -1,0 +1,92 @@
+{
+  "version": "8.2",
+  "slide_id": "3_5_edb0bd50-fac4-2d11-0885-67ff38c6ab11_153437",
+  "method": "auto_orientation_v8.2_partial_v8.1",
+  "algorithm": "hybrid v8.2 (precision/IoU auto-switch + border removal)",
+  "coverage_mode": "partial_v8.1",
+  "original_sizes": {
+    "he": [
+      79750,
+      74343
+    ],
+    "cosmx": [
+      37745,
+      25000
+    ],
+    "size_ratio": 0.40478533731875765
+  },
+  "transform": {
+    "rotation": 0,
+    "flipX": false,
+    "flipY": false,
+    "translateX": 0.1494140625,
+    "translateY": 0.39622641509433965,
+    "translateX_pixels": 153,
+    "translateY_pixels": 378,
+    "scale": 0.85
+  },
+  "detection": {
+    "combined_score": 0.2731610328050648,
+    "match_score": 0.23866719007492065,
+    "iou_score": 0.153783766917656,
+    "detection_scale": 0.85,
+    "processing_size": 1024,
+    "top_candidates": [
+      {
+        "rotation": 90,
+        "flipX": true,
+        "flipY": true,
+        "scale": 0.9,
+        "score": 0.3166,
+        "position": [
+          238,
+          33
+        ]
+      },
+      {
+        "rotation": 270,
+        "flipX": false,
+        "flipY": false,
+        "scale": 0.9,
+        "score": 0.3166,
+        "position": [
+          238,
+          33
+        ]
+      },
+      {
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "scale": 0.85,
+        "score": 0.2732,
+        "position": [
+          153,
+          378
+        ]
+      },
+      {
+        "rotation": 180,
+        "flipX": true,
+        "flipY": true,
+        "scale": 0.85,
+        "score": 0.2732,
+        "position": [
+          153,
+          378
+        ]
+      },
+      {
+        "rotation": 90,
+        "flipX": false,
+        "flipY": false,
+        "scale": 0.5,
+        "score": 0.25,
+        "position": [
+          109,
+          147
+        ]
+      }
+    ]
+  }
+}

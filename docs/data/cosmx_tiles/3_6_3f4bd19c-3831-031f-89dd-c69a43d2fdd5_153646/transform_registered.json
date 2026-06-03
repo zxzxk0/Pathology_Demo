@@ -1,0 +1,47 @@
+{
+  "version": "anchor_affine_thumb_manual_orientation_v3_reg",
+  "method": "anchor_affine_manual_fine_registered",
+  "slide_id": "3_6_3f4bd19c-3831-031f-89dd-c69a43d2fdd5_153646",
+  "transform": {
+    "rotation": 90,
+    "flipX": true,
+    "flipY": false,
+    "scale": 1.2332874923999997,
+    "translateX_pixels": 108,
+    "translateY_pixels": -182,
+    "translateX": 0.10546875,
+    "translateY": -0.19198312236286919
+  },
+  "warp_matrix": null,
+  "rotation_exact": 0.0,
+  "original_sizes": {
+    "he": [
+      86759,
+      80350
+    ],
+    "cosmx": [
+      37745,
+      25000
+    ]
+  },
+  "anchor_registration": {
+    "transform_type": "affine",
+    "mode": "manual",
+    "n_pairs": 5,
+    "inliers": 5,
+    "reprojection_error_px": 4.828
+  },
+  "detection": {
+    "processing_size": 1024,
+    "combined_score": 0.995285239039802
+  },
+  "fine_registration_source_transform": "E:\\\ubcd1\ub9ac\\data\\cosmx_tiles\\3_6_3f4bd19c-3831-031f-89dd-c69a43d2fdd5_153646\\transform_registered.json",
+  "fine_registration_source_svs": "E:\\\ubcd1\ub9ac\\data\\slides\\3_6_3f4bd19c-3831-031f-89dd-c69a43d2fdd5_153646.svs",
+  "registration": {
+    "initial_score": 0.995285239039802,
+    "final_score": 0.6955120658202677,
+    "coarse_search": "dx\u00b115% dy\u00b115% scale\u00b125%",
+    "fine_search": "dx\u00b14%  dy\u00b14%  scale\u00b18%",
+    "micro_search": "dx\u00b115px dy\u00b115px scale\u00b12%"
+  }
+}

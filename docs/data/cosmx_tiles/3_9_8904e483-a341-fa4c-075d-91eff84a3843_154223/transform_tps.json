@@ -1,0 +1,144 @@
+{
+  "version": "8.2_reg_tps",
+  "slide_id": "3_9_8904e483-a341-fa4c-075d-91eff84a3843_154223",
+  "method": "auto_orientation_v8.2_partial_registered",
+  "algorithm": "hybrid v8.2 (precision/IoU auto-switch + border removal)",
+  "coverage_mode": "partial",
+  "original_sizes": {
+    "he": [
+      92165,
+      75544
+    ],
+    "cosmx": [
+      37745,
+      25000
+    ],
+    "size_ratio": 0.37023510460324094
+  },
+  "transform": {
+    "rotation": 90,
+    "flipX": false,
+    "flipY": false,
+    "translateX": 0.39453125,
+    "translateY": 0.27413587604290823,
+    "translateX_pixels": 404,
+    "translateY_pixels": 230,
+    "scale": 0.451535
+  },
+  "detection": {
+    "combined_score": 0.3222769008723623,
+    "match_score": 0.29140162467956543,
+    "iou_score": 0.5373049104932142,
+    "detection_scale": 0.55,
+    "processing_size": 1024,
+    "top_candidates": [
+      {
+        "rotation": 90,
+        "flipX": false,
+        "flipY": false,
+        "scale": 0.55,
+        "score": 0.3223,
+        "position": [
+          241,
+          128
+        ]
+      },
+      {
+        "rotation": 270,
+        "flipX": true,
+        "flipY": true,
+        "scale": 0.55,
+        "score": 0.3223,
+        "position": [
+          241,
+          128
+        ]
+      },
+      {
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "scale": 0.5,
+        "score": 0.2995,
+        "position": [
+          198,
+          499
+        ]
+      },
+      {
+        "rotation": 180,
+        "flipX": true,
+        "flipY": true,
+        "scale": 0.5,
+        "score": 0.2995,
+        "position": [
+          198,
+          499
+        ]
+      },
+      {
+        "rotation": 0,
+        "flipX": false,
+        "flipY": true,
+        "scale": 0.6,
+        "score": 0.2978,
+        "position": [
+          154,
+          424
+        ]
+      }
+    ]
+  },
+  "registration": {
+    "initial_score": 0.3222769008723623,
+    "final_score": 0.44872267489318834,
+    "coarse_search": "dx\u00b115% dy\u00b115% scale\u00b125%",
+    "fine_search": "dx\u00b14%  dy\u00b14%  scale\u00b18%",
+    "micro_search": "dx\u00b115px dy\u00b115px scale\u00b12%"
+  },
+  "tps_registration": {
+    "n_control_points": 4,
+    "he_control_points": [
+      [
+        515.0687120690484,
+        422.2004996076799
+      ],
+      [
+        689.2684277127491,
+        483.36017083201517
+      ],
+      [
+        613.2911795961743,
+        408.9266737513284
+      ],
+      [
+        369.6350806451613,
+        463.89516129032256
+      ]
+    ],
+    "cx_control_points": [
+      [
+        487.16012364760434,
+        456.5635239567233
+      ],
+      [
+        677.0748074807481,
+        512.9548954895489
+      ],
+      [
+        598.3375251509054,
+        457.3631790744467
+      ],
+      [
+        427.2352941176471,
+        434.38080495356036
+      ]
+    ],
+    "scores": {
+      "iou": 0.0416,
+      "precision": 0.3725,
+      "recall": 0.0447,
+      "f1": 0.0799
+    }
+  }
+}

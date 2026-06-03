@@ -1,0 +1,144 @@
+{
+  "version": "8.2_reg_tps",
+  "slide_id": "3_12_edd069bb-1083-5023-7272-190a66373fc3_155005",
+  "method": "auto_orientation_v8.2_full_registered",
+  "algorithm": "hybrid v8.2 (precision/IoU auto-switch + border removal)",
+  "coverage_mode": "full",
+  "original_sizes": {
+    "he": [
+      83755,
+      60726
+    ],
+    "cosmx": [
+      37745,
+      25000
+    ],
+    "size_ratio": 0.43117246847540713
+  },
+  "transform": {
+    "rotation": 90,
+    "flipX": false,
+    "flipY": false,
+    "translateX": 0.25024437927663734,
+    "translateY": 0.1320754716981132,
+    "translateX_pixels": 256,
+    "translateY_pixels": 98,
+    "scale": 0.5398350000000002
+  },
+  "detection": {
+    "combined_score": 0.3357382425895104,
+    "match_score": 0.4004420340061188,
+    "iou_score": 0.4004420340061188,
+    "detection_scale": 0.55,
+    "processing_size": 1024,
+    "top_candidates": [
+      {
+        "rotation": 90,
+        "flipX": false,
+        "flipY": false,
+        "scale": 0.55,
+        "score": 0.3357,
+        "position": [
+          253,
+          96
+        ]
+      },
+      {
+        "rotation": 270,
+        "flipX": true,
+        "flipY": true,
+        "scale": 0.55,
+        "score": 0.3357,
+        "position": [
+          253,
+          96
+        ]
+      },
+      {
+        "rotation": 0,
+        "flipX": false,
+        "flipY": true,
+        "scale": 1.0,
+        "score": 0.1883,
+        "position": [
+          -438,
+          9
+        ]
+      },
+      {
+        "rotation": 180,
+        "flipX": true,
+        "flipY": false,
+        "scale": 1.0,
+        "score": 0.1883,
+        "position": [
+          -438,
+          9
+        ]
+      },
+      {
+        "rotation": 90,
+        "flipX": true,
+        "flipY": false,
+        "scale": 1.0,
+        "score": 0.1842,
+        "position": [
+          -140,
+          -348
+        ]
+      }
+    ]
+  },
+  "registration": {
+    "initial_score": 0.3357382425895104,
+    "final_score": 0.3542999895910479,
+    "coarse_search": "dx\u00b115% dy\u00b115% scale\u00b125%",
+    "fine_search": "dx\u00b14%  dy\u00b14%  scale\u00b18%",
+    "micro_search": "dx\u00b115px dy\u00b115px scale\u00b12%"
+  },
+  "tps_registration": {
+    "n_control_points": 4,
+    "he_control_points": [
+      [
+        343.6629213483146,
+        177.61332816737698
+      ],
+      [
+        517.371037181996,
+        185.07788649706458
+      ],
+      [
+        561.0046210720888,
+        728.909426987061
+      ],
+      [
+        476.4706457925636,
+        419.0831702544031
+      ]
+    ],
+    "cx_control_points": [
+      [
+        374.0347794908569,
+        158.70849766941555
+      ],
+      [
+        533.4806934594169,
+        174.38888888888889
+      ],
+      [
+        520.5940977261732,
+        608.6178035800677
+      ],
+      [
+        472.7270628967109,
+        451.8315060588575
+      ]
+    ],
+    "scores": {
+      "iou": 0.1995,
+      "precision": 0.4408,
+      "recall": 0.2671,
+      "f1": 0.3327
+    }
+  }
+}
