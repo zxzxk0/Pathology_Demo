@@ -62,7 +62,8 @@ def find_slides():
         transform = {"transform": "identity"}
         if registered and tf_reg:
             try:
-                transform = json.loads(tf_reg.read_text(encoding="utf-8"))
+                raw = json.loads(tf_reg.read_text(encoding="utf-8"))
+                transform = raw.get("transform", raw)
             except Exception:
                 pass
 
