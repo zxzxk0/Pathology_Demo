@@ -917,55 +917,82 @@ window.addEventListener('error', e => {
 // (PIPELINE_TIMER and related vars declared below in WEB PIPELINE POLLING section)
 let PIPELINE_ANCHOR_SHOWN = false;
 
+// ── STATIC MODE (GitHub Pages) ──────────────────────────────────────────────
+// Flask API 대신 generate_manifest.py 로 생성된 docs/slides.json 을 읽습니다.
+
+// 슬라이드 캐시 (slides.json 로드 후 저장)
+let _SLIDES_CACHE = null;
+
+async function _loadSlidesJSON() {
+  if (_SLIDES_CACHE) return _SLIDES_CACHE;
+  // 로컬(file://) 또는 GitHub Pages 양쪽 지원
+  const urls = ['./slides.json', '/Pathology_Demo/slides.json'];
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        _SLIDES_CACHE = await res.json();
+        return _SLIDES_CACHE;
+      }
+    } catch(e) {}
+  }
+  throw new Error('slides.json 을 찾을 수 없습니다. generate_manifest.py 를 먼저 실행하세요.');
+}
+
 async function apiJSON(url, options = {}) {
+  // 정적 모드: GET /api/slides → slides.json
+  // 나머지 API (pipeline 등) 는 데모에서 불필요하므로 무시
   const res = await fetch(url, options);
-
-  // Read body only once. Do not call res.json() and res.text() on the same response.
   const rawText = await res.text();
-
   let data = {};
   if (rawText) {
-    try {
-      data = JSON.parse(rawText);
-    } catch (e) {
-      data = { error: rawText };
-    }
+    try { data = JSON.parse(rawText); }
+    catch (e) { data = { error: rawText }; }
   }
-
-  if (!res.ok) {
-    throw new Error(data.error || ('HTTP ' + res.status));
-  }
-
+  if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
   return data;
 }
+
 async function apiGetSlides() {
-  return apiJSON('/api/slides');
+  const slides = await _loadSlidesJSON();
+  return slides;
 }
 
 async function apiGetCosmxInfo(slideId) {
   try {
-    return await apiJSON('/api/cosmx/' + encodeURIComponent(slideId) + '/dzi');
+    // slides.json 에 cosmx 정보가 이미 포함되어 있음
+    const slides = await _loadSlidesJSON();
+    const slide  = slides.find(s => s.id === slideId);
+    if (slide && slide.cosmx) return slide.cosmx;
+    return { has_cosmx: false };
   } catch(e) {
-    return { has_cosmx:false };
+    return { has_cosmx: false };
   }
+}
+
+function normalizeCosMxInfo(info) {
+  if (!info) return { has_cosmx: false };
+  // dzi_url 정규화
+  if (info.dzi_url && !info.tileSource) info.tileSource = info.dzi_url;
+  return info;
 }
 
 async function initWebApp() {
   try {
-    statusText('Connecting to backend...');
+    statusText('Loading slides...');
     const slides = await apiGetSlides();
-    S.slides = normalizeSlideUrls(slides);
+    S.slides = slides || [];
     populateSlideSelect(S.slides);
 
     if (S.slides.length > 0) {
       await loadSlide(S.slides[0]);
       document.getElementById('slideSelect').value = S.slides[0].id;
     } else {
-      statusText('Ready');
+      statusText('No slides found');
     }
   } catch(e) {
     console.error('Init error:', e);
-    statusText('Backend connection failed: ' + e.message);
+    statusText('Load failed: ' + e.message);
   }
 }
 
@@ -2651,9 +2678,7 @@ function thDrawOverlay() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// DEMO MODE PATCH
-// 파이프라인(파일 업로드/처리) 기능을 숨기고
-// 이미 처리된 타일만 볼 수 있는 데모 모드로 전환
+// DEMO MODE PATCH (GitHub Pages 정적 배포용)
 // ═══════════════════════════════════════════════════════════════
 (function patchDemoMode() {
   // "Register New Slide" 버튼 숨김
@@ -2661,29 +2686,28 @@ function thDrawOverlay() {
     if (btn.textContent.includes('Register')) btn.style.display = 'none';
   });
 
-  // Empty state 버튼 텍스트 변경
+  // Empty state 버튼 비활성화
   const emptyBtn = document.querySelector('#emptyState button');
   if (emptyBtn) {
     emptyBtn.textContent = 'No slides available';
     emptyBtn.disabled    = true;
-    emptyBtn.style.background = 'var(--border)';
-    emptyBtn.style.cursor     = 'not-allowed';
+    emptyBtn.style.cssText += 'background:var(--border);cursor:not-allowed;';
   }
 
-  // goRegister를 데모 알림으로 교체
+  // Register 화면 접근 차단
   window.goRegister = function() {
-    alert('📌 Demo Mode\n\nThis is a read-only demo. The slide registration pipeline is not available in the web demo.');
+    alert('📌 Demo Mode\nSlide registration is not available in the web demo.');
   };
 
-  // 데모 배지 추가
-  const header = document.querySelector('.v-header');
-  if (header) {
+  // DEMO 배지 추가
+  const logo = document.querySelector('.v-logo');
+  if (logo) {
     const badge = document.createElement('span');
     badge.textContent = 'DEMO';
-    badge.style.cssText = 'background:#f39c12;color:#000;font-size:0.65rem;font-weight:800;'
-      + 'padding:0.15rem 0.55rem;border-radius:10px;letter-spacing:1px;margin-left:4px;';
-    const logo = header.querySelector('.v-logo');
-    if (logo) logo.insertAdjacentElement('afterend', badge);
+    badge.style.cssText =
+      'background:#f39c12;color:#000;font-size:0.62rem;font-weight:800;' +
+      'padding:0.12rem 0.5rem;border-radius:10px;letter-spacing:1px;margin-left:6px;vertical-align:middle;';
+    logo.insertAdjacentElement('afterend', badge);
   }
 })();
 
