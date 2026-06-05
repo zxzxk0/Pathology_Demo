@@ -1942,12 +1942,14 @@ function setupSync() {
   if (!S.syncEnabled || !S.osdHE || !S.osdCosMx) return;
   S._syncHE = () => {
     if (S.syncing) return; S.syncing = true;
+    if (!S.osdCosMx || !S.osdCosMx.viewport) { S.syncing = false; return; }
     S.osdCosMx.viewport.setZoom(S.osdHE.viewport.getZoom());
     S.osdCosMx.viewport.panTo(S.osdHE.viewport.getCenter());
     S.syncing = false;
   };
   S._syncCosMx = () => {
     if (S.syncing) return; S.syncing = true;
+    if (!S.osdHE || !S.osdHE.viewport) { S.syncing = false; return; }
     S.osdHE.viewport.setZoom(S.osdCosMx.viewport.getZoom());
     S.osdHE.viewport.panTo(S.osdCosMx.viewport.getCenter());
     S.syncing = false;
@@ -1970,6 +1972,7 @@ function toggleSync() {
 
 function resyncPanels() {
   if (!S.osdHE || !S.osdCosMx) return;
+  if (!S.osdCosMx.viewport || !S.osdHE.viewport) return;
   S.osdCosMx.viewport.setZoom(S.osdHE.viewport.getZoom());
   S.osdCosMx.viewport.panTo(S.osdHE.viewport.getCenter());
 }
