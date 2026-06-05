@@ -1936,26 +1936,25 @@ function updateAnnoCount(delta) {
 // ── Panel sync ────────────────────────────────────────────────────────────
 
 function setupSync() {
-  // Remove previous sync handlers by named refs (avoids clearHandlers issues)
-  if (S.osdHE    && S._syncHE)    { S.osdHE.removeHandler(   'viewport-change', S._syncHE);    S._syncHE    = null; }
-  if (S.osdCosMx && S._syncCosMx) { S.osdCosMx.removeHandler('viewport-change', S._syncCosMx); S._syncCosMx = null; }
+  if (S.osdHE    && S._syncHE)    { S.osdHE.removeHandler(   'animation', S._syncHE);    S._syncHE    = null; }
+  if (S.osdCosMx && S._syncCosMx) { S.osdCosMx.removeHandler('animation', S._syncCosMx); S._syncCosMx = null; }
   if (!S.syncEnabled || !S.osdHE || !S.osdCosMx) return;
   S._syncHE = () => {
     if (S.syncing) return; S.syncing = true;
-    if (!S.osdCosMx || !S.osdCosMx.viewport) { S.syncing = false; return; }
-    S.osdCosMx.viewport.setZoom(S.osdHE.viewport.getZoom());
+    if (!S.osdCosMx?.viewport?._contentSize) { S.syncing = false; return; }
+    S.osdCosMx.viewport.zoomTo(S.osdHE.viewport.getZoom(), null, true);
     S.osdCosMx.viewport.panTo(S.osdHE.viewport.getCenter());
     S.syncing = false;
   };
   S._syncCosMx = () => {
     if (S.syncing) return; S.syncing = true;
-    if (!S.osdHE || !S.osdHE.viewport) { S.syncing = false; return; }
-    S.osdHE.viewport.setZoom(S.osdCosMx.viewport.getZoom());
+    if (!S.osdCosMx?.viewport?._contentSize || !S.osdHE?.viewport?._contentSize) return;
+    S.osdHE.viewport.zoomTo(S.osdCosMx.viewport.getZoom(), null, true);
     S.osdHE.viewport.panTo(S.osdCosMx.viewport.getCenter());
     S.syncing = false;
   };
-  S.osdHE.addHandler(   'viewport-change', S._syncHE);
-  S.osdCosMx.addHandler('viewport-change', S._syncCosMx);
+  S.osdHE.addHandler(   'animation', S._syncHE);
+  S.osdCosMx.addHandler('animation', S._syncCosMx);
 }
 
 function toggleSync() {
@@ -1972,8 +1971,8 @@ function toggleSync() {
 
 function resyncPanels() {
   if (!S.osdHE || !S.osdCosMx) return;
-  if (!S.osdCosMx.viewport || !S.osdHE.viewport) return;
-  S.osdCosMx.viewport.setZoom(S.osdHE.viewport.getZoom());
+  if (!S.osdCosMx?.viewport?.contentSize || !S.osdHE?.viewport?.contentSize) return;
+  S.osdCosMx.viewport.zoomTo(S.osdHE.viewport.getZoom(), null, true);
   S.osdCosMx.viewport.panTo(S.osdHE.viewport.getCenter());
 }
 
