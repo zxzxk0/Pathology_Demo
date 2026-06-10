@@ -16,11 +16,15 @@ async function apiJSON(path, opts = {}) {
 let currentSlideId = null;
 let slideDziMap    = {};
 let viewerLeft     = null, viewerRight = null, annotorious = null;
-let syncEnabled    = false, isSyncing = false;
-let lastCenter     = null, lastZoom   = null;
-let cosmxVisible   = true,  cosmxData  = null;
-let cosmxState     = { rotation:0, flipX:false, flipY:false, scale:1.0 };
-let sidePanelOpen  = true;
+let syncEnabled    = false, isSyncing  = false;
+
+// [SYNC 개편] delta 방식 제거 → sync ON 시점의 offset/zoomRatio 한 번만 저장
+let syncOffsetX   = 0, syncOffsetY  = 0;   // right.center - left.center
+let syncZoomRatio = 1;                      // right.zoom   / left.zoom
+
+let cosmxVisible  = true,  cosmxData  = null;
+let cosmxState    = { rotation:0, flipX:false, flipY:false, scale:1.0 };
+let sidePanelOpen = true;
 let pointOverlayState = null;
 
 const LABEL_COLORS = {
@@ -60,8 +64,8 @@ async function loadRecentSlides() {
         if (sel) {
             sel.innerHTML = '<option value="">Select slide...</option>';
             slides.forEach(s => {
-                const o     = document.createElement('option');
-                o.value     = s.id;
+                const o       = document.createElement('option');
+                o.value       = s.id;
                 o.textContent = s.id;
                 sel.appendChild(o);
             });
@@ -437,45 +441,52 @@ function savePosition() {
 }
 
 // ── SYNC ──────────────────────────────────────────────────────────────────
+/**
+ * [개편된 sync 로직]
+ *
+ * 이전 방식: pan/zoom 이벤트마다 delta를 계산해서 right에 더함
+ *   → lastCenter/lastZoom 누적 오차 → sync ON/OFF 후 튀는 버그
+ *
+ * 새 방식: sync ON 시점에 두 viewport의 offset/zoomRatio를 한 번만 저장
+ *   → Left가 움직일 때마다 "Left 현재값 + 고정 offset"을 Right에 직접 set
+ *   → 누적 오차 없음, 어떤 상태에서 켜도 현재 위치 그대로 유지
+ */
 function setupSync() {
-    viewerLeft.addHandler('open', () => {
-        lastCenter = viewerLeft.viewport.getCenter();
-        lastZoom   = viewerLeft.viewport.getZoom();
-    });
     viewerLeft.addHandler('pan', () => {
         if (!syncEnabled || isSyncing || !viewerRight.viewport) return;
         isSyncing = true;
         try {
-            const c  = viewerLeft.viewport.getCenter();
-            if (lastCenter) {
-                const dx = c.x - lastCenter.x, dy = c.y - lastCenter.y;
-                const rc = viewerRight.viewport.getCenter();
-                if (rc) viewerRight.viewport.panTo(
-                    new OpenSeadragon.Point(rc.x + dx, rc.y + dy), true);
-            }
-            lastCenter = c.clone();
+            const lc = viewerLeft.viewport.getCenter();
+            viewerRight.viewport.panTo(
+                new OpenSeadragon.Point(lc.x + syncOffsetX, lc.y + syncOffsetY), true
+            );
         } finally { isSyncing = false; }
     });
+
     viewerLeft.addHandler('zoom', () => {
         if (!syncEnabled || isSyncing || !viewerRight.viewport) return;
         isSyncing = true;
         try {
-            const z = viewerLeft.viewport.getZoom();
-            if (lastZoom && lastZoom > 0) {
-                const rz = viewerRight.viewport.getZoom();
-                if (rz) viewerRight.viewport.zoomTo(rz * (z / lastZoom), null, true);
-            }
-            lastZoom = z;
+            const lz = viewerLeft.viewport.getZoom();
+            const lc = viewerLeft.viewport.getCenter();
+            viewerRight.viewport.zoomTo(lz * syncZoomRatio, null, true);
+            // zoom 시 center도 같이 보정 (OSD는 zoom 중심점이 달라질 수 있음)
+            viewerRight.viewport.panTo(
+                new OpenSeadragon.Point(lc.x + syncOffsetX, lc.y + syncOffsetY), true
+            );
         } finally { isSyncing = false; }
     });
 }
 
 function toggleSync() {
     syncEnabled = !syncEnabled;
-    if (syncEnabled && viewerLeft.viewport) {
-        lastCenter = viewerLeft.viewport.getCenter();
-        lastZoom   = viewerLeft.viewport.getZoom();
+
+    if (syncEnabled) {
+        // sync ON 시점의 두 viewport 상태 차이를 offset으로 저장
+        // → 이후 Left가 어디로 움직여도 Right는 이 차이만큼 떨어진 채로 따라옴
+        _captureSyncOffset();
     }
+
     const btn = el('btnSync');
     if (btn) {
         btn.textContent = syncEnabled ? 'Sync: ON' : 'Sync: OFF';
@@ -484,11 +495,20 @@ function toggleSync() {
     el('syncStatus').textContent = syncEnabled ? '🔄 Synced' : '🔓 Independent';
 }
 
-function resyncPanels() {
-    if (viewerLeft?.viewport) {
-        lastCenter = viewerLeft.viewport.getCenter();
-        lastZoom   = viewerLeft.viewport.getZoom();
-    }
+/**
+ * 현재 두 viewport의 차이를 offset/zoomRatio로 저장.
+ * - toggleSync() 에서 sync를 켤 때 호출
+ * - 두 이미지를 재정렬한 뒤 sync를 다시 켤 때도 자동으로 새 offset이 캡처됨
+ */
+function _captureSyncOffset() {
+    if (!viewerLeft?.viewport || !viewerRight?.viewport) return;
+    const lc = viewerLeft.viewport.getCenter();
+    const rc = viewerRight.viewport.getCenter();
+    const lz = viewerLeft.viewport.getZoom();
+    const rz = viewerRight.viewport.getZoom();
+    syncOffsetX   = rc.x - lc.x;
+    syncOffsetY   = rc.y - lc.y;
+    syncZoomRatio = (lz > 0) ? rz / lz : 1;
 }
 
 // ── SIDE PANEL ────────────────────────────────────────────────────────────
