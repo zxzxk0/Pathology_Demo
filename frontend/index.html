@@ -1765,6 +1765,7 @@ function createRightViewer(tileSource) {
     S.osdCosMx.destroy();
     S.osdCosMx = null;
   }
+  S._syncHE = null; S._syncCosMx = null;
   S.osdCosMx = OpenSeadragon({
     id: 'viewerRight',
     tileSources: tileSource,
@@ -1772,6 +1773,11 @@ function createRightViewer(tileSource) {
     maxZoomPixelRatio: 4,
     gestureSettingsMouse: { clickToZoom: false },
     animationTime: 0.4,
+  });
+  // CosMx viewport가 실제로 열린 뒤에 setupSync 등록
+  S.osdCosMx.addOnceHandler('open', () => {
+    setupSync();
+    console.log('[createRightViewer] open complete → setupSync registered');
   });
 }
 
@@ -1917,7 +1923,7 @@ async function loadSlide(slide) {
   _restoreCosMxAdjustment(JSON.parse(localStorage.getItem('cosmx_adj_' + slide.id) || '{}'));
   _updateQCBadge(localStorage.getItem('qc_' + slide.id) || '');
 
-  setupSync();
+  // setupSync는 createRightViewer의 open 콜백에서 호출됨
   statusText('Ready: ' + (slide.name || slide.id));
 }
 
@@ -1935,43 +1941,107 @@ function updateAnnoCount(delta) {
 
 // ── Panel sync ────────────────────────────────────────────────────────────
 
+function syncCaptureLeftState() {
+  if (!S.osdHE || !S.osdHE.viewport) {
+    S._syncLast = null;
+    return;
+  }
+  S._syncLast = {
+    center: S.osdHE.viewport.getCenter().clone(),
+    zoom:   S.osdHE.viewport.getZoom()
+  };
+}
+
 function setupSync() {
-  // Remove previous sync handlers by named refs (avoids clearHandlers issues)
-  if (S.osdHE    && S._syncHE)    { S.osdHE.removeHandler(   'viewport-change', S._syncHE);    S._syncHE    = null; }
-  if (S.osdCosMx && S._syncCosMx) { S.osdCosMx.removeHandler('viewport-change', S._syncCosMx); S._syncCosMx = null; }
-  if (!S.syncEnabled || !S.osdHE || !S.osdCosMx) return;
+  // One-way delta sync only: H&E -> right panel.
+  // Important: this does NOT copy H&E absolute center/zoom to CosMx.
+  // The right panel keeps its current location, then follows only the
+  // movement/zoom changes made on the left after Sync is turned ON.
+  if (S.osdHE && S._syncHE) {
+    S.osdHE.removeHandler('viewport-change', S._syncHE);
+    S._syncHE = null;
+  }
+
+  S._syncCosMx = null;   // legacy right-to-left sync disabled on purpose
+  S.syncing = false;
+
+  if (!S.syncEnabled || !S.osdHE || !S.osdCosMx) {
+    syncCaptureLeftState();
+    return;
+  }
+
+  // Capture baseline at the moment sync becomes active.
+  // This prevents the right panel from jumping to the left panel's location.
+  syncCaptureLeftState();
+
   S._syncHE = () => {
-    if (S.syncing) return; S.syncing = true;
-    S.osdCosMx.viewport.setZoom(S.osdHE.viewport.getZoom());
-    S.osdCosMx.viewport.panTo(S.osdHE.viewport.getCenter());
-    S.syncing = false;
+    if (!S.syncEnabled || S.syncing || !S.osdHE || !S.osdCosMx) return;
+    if (!S.osdHE.viewport || !S.osdCosMx.viewport) return;
+
+    const curCenter = S.osdHE.viewport.getCenter();
+    const curZoom   = S.osdHE.viewport.getZoom();
+
+    if (!S._syncLast) {
+      syncCaptureLeftState();
+      return;
+    }
+
+    const prevCenter = S._syncLast.center;
+    const prevZoom   = S._syncLast.zoom;
+    const dx = curCenter.x - prevCenter.x;
+    const dy = curCenter.y - prevCenter.y;
+    const zoomRatio = prevZoom > 0 ? curZoom / prevZoom : 1;
+
+    // Update baseline before moving the right panel, so repeated OSD events
+    // cannot reuse the same delta.
+    S._syncLast = { center: curCenter.clone(), zoom: curZoom };
+
+    if (Math.abs(dx) < 1e-12 && Math.abs(dy) < 1e-12 && Math.abs(zoomRatio - 1) < 1e-9) return;
+
+    S.syncing = true;
+    try {
+      const rv = S.osdCosMx.viewport;
+      const rc = rv.getCenter();
+      const rz = rv.getZoom();
+      const nextCenter = new OpenSeadragon.Point(rc.x + dx, rc.y + dy);
+      const nextZoom   = rz * zoomRatio;
+
+      rv.zoomTo(nextZoom, null, true);
+      rv.panTo(nextCenter, true);
+    } finally {
+      S.syncing = false;
+    }
   };
-  S._syncCosMx = () => {
-    if (S.syncing) return; S.syncing = true;
-    S.osdHE.viewport.setZoom(S.osdCosMx.viewport.getZoom());
-    S.osdHE.viewport.panTo(S.osdCosMx.viewport.getCenter());
-    S.syncing = false;
-  };
-  S.osdHE.addHandler(   'viewport-change', S._syncHE);
-  S.osdCosMx.addHandler('viewport-change', S._syncCosMx);
+
+  S.osdHE.addHandler('viewport-change', S._syncHE);
 }
 
 function toggleSync() {
   S.syncEnabled = !S.syncEnabled;
+
   const btn = document.getElementById('btnSync');
   if (btn) {
     btn.textContent = 'Sync: ' + (S.syncEnabled ? 'ON' : 'OFF');
     btn.classList.toggle('on', S.syncEnabled);
   }
-  document.getElementById('syncStatus').textContent =
-    S.syncEnabled ? 'Panels synced' : 'Independent panels';
+
+  const st = document.getElementById('syncStatus');
+  if (st) {
+    st.textContent = S.syncEnabled
+      ? 'Following H&E movement only'
+      : 'Independent panels';
+  }
+
   setupSync();
 }
 
 function resyncPanels() {
-  if (!S.osdHE || !S.osdCosMx) return;
-  S.osdCosMx.viewport.setZoom(S.osdHE.viewport.getZoom());
-  S.osdCosMx.viewport.panTo(S.osdHE.viewport.getCenter());
+  // New behavior: do not force CosMx to H&E coordinates.
+  // Just reset the baseline, so the next left-panel movement is followed
+  // from the right panel's current position.
+  syncCaptureLeftState();
+  const st = document.getElementById('syncStatus');
+  if (st) st.textContent = S.syncEnabled ? 'Sync baseline reset' : 'Independent panels';
 }
 
 function toggleCosMx() {

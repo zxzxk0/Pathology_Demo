@@ -17,10 +17,7 @@ let currentSlideId = null;
 let slideDziMap    = {};
 let viewerLeft     = null, viewerRight = null, annotorious = null;
 let syncEnabled    = false, isSyncing  = false;
-
-// [SYNC 개편] delta 방식 제거 → sync ON 시점의 offset/zoomRatio 한 번만 저장
-let syncOffsetX   = 0, syncOffsetY  = 0;   // right.center - left.center
-let syncZoomRatio = 1;                      // right.zoom   / left.zoom
+let syncLastLeft   = null;
 
 let cosmxVisible  = true,  cosmxData  = null;
 let cosmxState    = { rotation:0, flipX:false, flipY:false, scale:1.0 };
@@ -98,21 +95,32 @@ async function openSlideById(slideId) {
 function initViewers() {
     const opts = {
         prefixUrl: 'https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/',
-        showNavigator: true, navigatorPosition: 'TOP_RIGHT',
-        gestureSettingsMouse: { scrollToZoom:true, clickToZoom:false, dragToPan:false },
+        showNavigator: true,
+        navigatorPosition: 'TOP_RIGHT',
+        gestureSettingsMouse: {
+            scrollToZoom: true,
+            clickToZoom: false,
+            dragToPan: false
+        },
     };
+
     viewerLeft  = OpenSeadragon({ id:'viewerLeft',  ...opts });
     viewerRight = OpenSeadragon({ id:'viewerRight', ...opts });
+
     annotorious = OpenSeadragon.Annotorious(viewerLeft, {
-        readOnly: true, allowEmpty: true,
-        drawOnSingleClick: false, disableEditor: true,
+        readOnly: true,
+        allowEmpty: true,
+        drawOnSingleClick: false,
+        disableEditor: true,
         formatter: a => {
             const lbl = a.body?.find(b => b.purpose === 'tagging')?.value || 'other';
             const s   = LABEL_COLORS[lbl] || LABEL_COLORS.other;
             return { style: `stroke:${s.stroke};stroke-width:2;fill:${s.fill};` };
         },
     });
+
     setupSync();
+
     window.addEventListener('keydown', e => {
         if (e.code === 'Space') {
             viewerLeft.gestureSettingsMouse.dragToPan  = true;
@@ -120,6 +128,7 @@ function initViewers() {
             e.preventDefault();
         }
     });
+
     window.addEventListener('keyup', e => {
         if (e.code === 'Space') {
             viewerLeft.gestureSettingsMouse.dragToPan  = false;
@@ -130,24 +139,34 @@ function initViewers() {
 
 async function loadSlide(slideId) {
     if (!viewerLeft) return;
+
     currentSlideId = slideId;
     annotorious?.clearAnnotations();
     clearPointOverlay();
     clearCosMxOverlay(true);
+
+    syncLastLeft = null;
+
     cosmxState = { rotation:0, flipX:false, flipY:false, scale:1.0 };
     updateAlignUI();
     loadQC();
 
     const dziUrl = slideDziMap[slideId];
     if (!dziUrl) return;
+
     viewerLeft.open(dziUrl);
     viewerRight.close();
+
     await new Promise(r => viewerLeft.addOnceHandler('open', r));
+
+    captureLeftSyncState();
     await loadCosMx();
     updateAnnoCount();
 }
 
-function onSlideChange(id) { if (id) openSlideById(id); }
+function onSlideChange(id) {
+    if (id) openSlideById(id);
+}
 
 // ── QC ────────────────────────────────────────────────────────────────────
 async function loadQC() {
@@ -168,56 +187,91 @@ async function setQC(status) {
             body:    JSON.stringify({ status }),
         });
         renderQCBadge(status);
-    } catch(e) { console.error('[setQC]', e); }
+    } catch(e) {
+        console.error('[setQC]', e);
+    }
 }
 
 function renderQCBadge(status) {
     const e = el('qcBadge');
     if (!e) return;
+
     e.className = 'qc-badge';
-    if      (status === 'approved') { e.classList.add('approved'); e.textContent = '✅ Approved'; }
-    else if (status === 'rejected') { e.classList.add('rejected'); e.textContent = '❌ Rejected'; }
-    else                            { e.textContent = 'Unreviewed'; }
+
+    if (status === 'approved') {
+        e.classList.add('approved');
+        e.textContent = '✅ Approved';
+    } else if (status === 'rejected') {
+        e.classList.add('rejected');
+        e.textContent = '❌ Rejected';
+    } else {
+        e.textContent = 'Unreviewed';
+    }
 }
 
 // ── ANNOTATION IMPORT ─────────────────────────────────────────────────────
 function onImportFile(input) {
     if (!input.files[0]) return;
+
     const reader = new FileReader();
+
     reader.onload = e => {
         try {
             const gj = JSON.parse(e.target.result);
             if (!gj.features) return alert('Invalid GeoJSON');
+
             const pts  = gj.features.filter(f => f.geometry.type === 'Point');
             const poly = gj.features.filter(f =>
-                f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon');
+                f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'
+            );
+
             let total = 0;
+
             if (poly.length) {
                 const annos = poly.map(f => {
                     const coords = f.geometry.type === 'Polygon'
                         ? f.geometry.coordinates[0]
                         : f.geometry.coordinates[0][0];
+
                     const raw = f.properties?.classification?.name
                               || f.properties?.name
                               || f.properties?.label
                               || 'other';
+
                     return {
                         '@context': 'http://www.w3.org/ns/anno.jsonld',
-                        type:       'Annotation',
-                        body:       [{ type:'TextualBody', purpose:'tagging', value: String(raw).toLowerCase() }],
-                        target:     { selector:{ type:'SvgSelector',
-                            value:`<svg><polygon points="${coords.map(([x,y])=>`${x},${y}`).join(' ')}"/></svg>`}},
+                        type: 'Annotation',
+                        body: [{
+                            type: 'TextualBody',
+                            purpose: 'tagging',
+                            value: String(raw).toLowerCase()
+                        }],
+                        target: {
+                            selector: {
+                                type: 'SvgSelector',
+                                value: `<svg><polygon points="${coords.map(([x,y])=>`${x},${y}`).join(' ')}"/></svg>`
+                            }
+                        },
                     };
                 });
+
                 annotorious.clearAnnotations();
                 annos.forEach(a => annotorious.addAnnotation(a));
                 setTimeout(() => annotorious.setAnnotations(annotorious.getAnnotations()), 100);
                 total += annos.length;
             }
-            if (pts.length) { renderPointOverlay(pts); total += pts.length; }
+
+            if (pts.length) {
+                renderPointOverlay(pts);
+                total += pts.length;
+            }
+
             updateAnnoCount(total);
-        } catch(err) { alert('Import failed: ' + err.message); }
+        } catch(err) {
+            alert('Import failed: ' + err.message);
+        }
     };
+
     reader.readAsText(input.files[0]);
     input.value = '';
 }
@@ -225,16 +279,24 @@ function onImportFile(input) {
 // ── POINT OVERLAY ─────────────────────────────────────────────────────────
 function renderPointOverlay(features) {
     clearPointOverlay();
-    const ti = viewerLeft.world.getItemAt(0); if (!ti) return;
+
+    const ti = viewerLeft.world.getItemAt(0);
+    if (!ti) return;
+
     const sz = ti.getContentSize();
     const tl = ti.imageToViewportCoordinates(0, 0);
     const br = ti.imageToViewportCoordinates(sz.x, sz.y);
+
     const NS  = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(NS, 'svg');
+
     svg.setAttribute('viewBox', `0 0 ${sz.x} ${sz.y}`);
     svg.setAttribute('preserveAspectRatio', 'none');
     svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;';
-    const c = LABEL_COLORS.lymphocyte, r = 20;
+
+    const c = LABEL_COLORS.lymphocyte;
+    const r = 20;
+
     const path = document.createElementNS(NS, 'path');
     path.setAttribute('d', features.map(f => {
         const [cx, cy] = f.geometry.coordinates;
@@ -243,20 +305,28 @@ function renderPointOverlay(features) {
     path.setAttribute('fill', c.fill);
     path.setAttribute('stroke', c.stroke);
     path.setAttribute('stroke-width', r * 0.5);
+
     svg.appendChild(path);
+
     const wrap = document.createElement('div');
     wrap.style.cssText = 'pointer-events:none;position:absolute;width:100%;height:100%;';
     wrap.appendChild(svg);
+
     viewerLeft.addOverlay({
         element:  wrap,
         location: new OpenSeadragon.Rect(tl.x, tl.y, br.x - tl.x, br.y - tl.y),
     });
+
     pointOverlayState = { el: wrap, count: features.length };
 }
 
 function clearPointOverlay() {
     if (!pointOverlayState) return;
-    try { viewerLeft.removeOverlay(pointOverlayState.el); } catch(_) {}
+
+    try {
+        viewerLeft.removeOverlay(pointOverlayState.el);
+    } catch(_) {}
+
     pointOverlayState = null;
 }
 
@@ -264,95 +334,163 @@ function clearPointOverlay() {
 async function loadCosMx() {
     try {
         clearCosMxOverlay(true);
+
         const info = await apiJSON(`/api/cosmx/${currentSlideId}/info`);
         if (!info.has_cosmx) return;
+
         const tf = await apiJSON(`/api/cosmx/${currentSlideId}/transform`);
+
         cosmxData = {
             dziUrl:       info.dzi_url,
             tiledImage:   null,
             transform:    info.registered ? { transform: 'identity' } : tf,
             isRegistered: !!info.registered,
         };
+
         if (cosmxVisible) await renderCosMxOverlay();
-    } catch(e) { console.error('[CosMx]', e); }
+    } catch(e) {
+        console.error('[CosMx]', e);
+    }
 }
 
 async function renderCosMxOverlay() {
     if (!cosmxVisible || !cosmxData?.dziUrl || !viewerRight || cosmxData.tiledImage) return;
+
     viewerRight.addTiledImage({
         tileSource: cosmxData.dziUrl,
-        opacity:    1.0,
-        index:      0,
+        opacity: 1.0,
+        index: 0,
         success: ev => {
             cosmxData.tiledImage = ev.item;
-            if (!cosmxData.isRegistered) applyCosMxTransform(ev.item, cosmxData.transform);
-            syncToLeft();
+            if (!cosmxData.isRegistered) {
+                applyCosMxTransform(ev.item, cosmxData.transform);
+            }
         },
     });
 }
 
-function syncToLeft() {
-    if (!viewerLeft?.viewport || !viewerRight?.viewport) return;
-    viewerRight.viewport.zoomTo(viewerLeft.viewport.getZoom(true), null, true);
-    viewerRight.viewport.panTo(viewerLeft.viewport.getCenter(true), true);
-}
-
 function applyCosMxTransform(item, td) {
     if (td.transform === 'identity' || !td.transform) return;
+
     const t  = td.transform;
     const he = viewerLeft.world.getItemAt(0);
     if (!he) return;
+
     const hb = he.getBounds();
-    let r = t.rotation || 0, fx = t.flipX || false, fy = t.flipY || false;
-    let vX = {x:1,y:0}, vY = {x:0,y:1};
+
+    let r  = t.rotation || 0;
+    let fx = t.flipX || false;
+    let fy = t.flipY || false;
+
+    let vX = {x:1,y:0};
+    let vY = {x:0,y:1};
+
     const k = Math.floor(r / 90) % 4;
-    for (let i = 0; i < k; i++) { vX = {x:vX.y, y:-vX.x}; vY = {x:vY.y, y:-vY.x}; }
-    if (fx) { vX.x = -vX.x; vY.x = -vY.x; }
-    if (fy) { vX.y = -vX.y; vY.y = -vY.y; }
-    let osdFlip = false, osdRot = 0;
-    outer: for (const fl of [false, true]) {
+    for (let i = 0; i < k; i++) {
+        vX = {x:vX.y, y:-vX.x};
+        vY = {x:vY.y, y:-vY.x};
+    }
+
+    if (fx) {
+        vX.x = -vX.x;
+        vY.x = -vY.x;
+    }
+
+    if (fy) {
+        vX.y = -vX.y;
+        vY.y = -vY.y;
+    }
+
+    let osdFlip = false;
+    let osdRot  = 0;
+
+    outer:
+    for (const fl of [false, true]) {
         for (const ro of [0, 90, 180, 270]) {
-            let oX = {x:1,y:0}, oY = {x:0,y:1};
-            if (fl) { oX.x = -oX.x; oY.x = -oY.x; }
+            let oX = {x:1,y:0};
+            let oY = {x:0,y:1};
+
+            if (fl) {
+                oX.x = -oX.x;
+                oY.x = -oY.x;
+            }
+
             const rk = Math.floor(ro / 90) % 4;
-            for (let i = 0; i < rk; i++) { oX = {x:-oX.y, y:oX.x}; oY = {x:-oY.y, y:oY.x}; }
-            if (vX.x === oX.x && vX.y === oX.y && vY.x === oY.x && vY.y === oY.y) {
-                osdFlip = fl; osdRot = ro; break outer;
+            for (let i = 0; i < rk; i++) {
+                oX = {x:-oX.y, y:oX.x};
+                oY = {x:-oY.y, y:oY.x};
+            }
+
+            if (
+                vX.x === oX.x && vX.y === oX.y &&
+                vY.x === oY.x && vY.y === oY.y
+            ) {
+                osdFlip = fl;
+                osdRot  = ro;
+                break outer;
             }
         }
     }
+
     item.setRotation(osdRot, true);
     item.setFlip(osdFlip);
-    const cxW = item.source.width, cxH = item.source.height;
+
+    const cxW = item.source.width;
+    const cxH = item.source.height;
     const sc  = t.scale || 1;
     const W   = hb.width * sc;
+
     item.setWidth(W, true);
-    let dx = 0, dy = 0;
+
+    let dx = 0;
+    let dy = 0;
+
     if (t.translateX !== undefined) {
         dx = t.translateX * hb.width  + hb.x;
         dy = t.translateY * hb.height + hb.y;
     } else if (t.x !== undefined) {
-        dx = t.x; dy = t.y;
+        dx = t.x;
+        dy = t.y;
     }
+
     const H  = W * (cxH / cxW);
     const tW = (osdRot % 180 !== 0) ? H : W;
     const tH = (osdRot % 180 !== 0) ? W : H;
-    item.setPosition(new OpenSeadragon.Point(dx + tW/2 - W/2, dy + tH/2 - H/2), true);
-    cosmxState = { rotation:r, flipX:fx, flipY:fy, scale: t.scale || 1 };
+
+    item.setPosition(
+        new OpenSeadragon.Point(dx + tW / 2 - W / 2, dy + tH / 2 - H / 2),
+        true
+    );
+
+    cosmxState = {
+        rotation: r,
+        flipX: fx,
+        flipY: fy,
+        scale: t.scale || 1
+    };
+
     updateAlignUI();
 }
 
 function clearCosMxOverlay(reset = false) {
-    if (viewerRight && cosmxData?.tiledImage) viewerRight.world.removeItem(cosmxData.tiledImage);
-    if (reset) cosmxData = null;
-    else if (cosmxData)  cosmxData.tiledImage = null;
+    if (viewerRight && cosmxData?.tiledImage) {
+        viewerRight.world.removeItem(cosmxData.tiledImage);
+    }
+
+    if (reset) {
+        cosmxData = null;
+    } else if (cosmxData) {
+        cosmxData.tiledImage = null;
+    }
 }
 
 function toggleCosMx() {
     cosmxVisible = !cosmxVisible;
+
     const btn = el('btnCosMx');
     btn.textContent = cosmxVisible ? 'CosMx: ON' : 'CosMx: OFF';
     btn.classList.toggle('on', cosmxVisible);
+
     if (cosmxVisible) {
         if (cosmxData?.dziUrl) renderCosMxOverlay();
     } else {
@@ -364,69 +502,124 @@ function toggleCosMx() {
 }
 
 // ── ALIGNMENT ─────────────────────────────────────────────────────────────
-function onRotInput(e)   { el('rotVal').textContent   = e.value; setRot(parseInt(e.value)); }
-function onScaleInput(e) { el('scaleVal').textContent = parseFloat(e.value).toFixed(2); setScale(parseFloat(e.value)); }
+function onRotInput(e) {
+    el('rotVal').textContent = e.value;
+    setRot(parseInt(e.value));
+}
+
+function onScaleInput(e) {
+    el('scaleVal').textContent = parseFloat(e.value).toFixed(2);
+    setScale(parseFloat(e.value));
+}
 
 function setRotPreset(deg) {
-    el('rotSlider').value = deg; el('rotVal').textContent = deg; setRot(deg);
+    el('rotSlider').value = deg;
+    el('rotVal').textContent = deg;
+    setRot(deg);
+
     document.querySelectorAll('.pr button').forEach(b =>
-        b.classList.toggle('active', parseInt(b.dataset.r) === deg));
+        b.classList.toggle('active', parseInt(b.dataset.r) === deg)
+    );
 }
 
 function setRot(d) {
     if (!cosmxData?.tiledImage) return;
+
     cosmxState.rotation = d;
-    let r = d, f = cosmxState.flipX;
-    if (cosmxState.flipY) { r = (d + 180) % 360; f = !f; }
+
+    let r = d;
+    let f = cosmxState.flipX;
+
+    if (cosmxState.flipY) {
+        r = (d + 180) % 360;
+        f = !f;
+    }
+
     cosmxData.tiledImage.setRotation(r, true);
     cosmxData.tiledImage.setFlip(f);
 }
 
 function toggleFlipX() {
     if (!cosmxData?.tiledImage) return;
+
     cosmxState.flipX = !cosmxState.flipX;
     el('btnFlipX').classList.toggle('on', cosmxState.flipX);
-    let r = cosmxState.rotation, f = cosmxState.flipX;
-    if (cosmxState.flipY) { r = (r + 180) % 360; f = !f; }
+
+    let r = cosmxState.rotation;
+    let f = cosmxState.flipX;
+
+    if (cosmxState.flipY) {
+        r = (r + 180) % 360;
+        f = !f;
+    }
+
     cosmxData.tiledImage.setRotation(r, true);
     cosmxData.tiledImage.setFlip(f);
 }
 
 function toggleFlipY() {
     if (!cosmxData?.tiledImage) return;
+
     cosmxState.flipY = !cosmxState.flipY;
     el('btnFlipY').classList.toggle('on', cosmxState.flipY);
-    let r = cosmxState.rotation, f = cosmxState.flipX;
-    if (cosmxState.flipY) { r = (r + 180) % 360; f = !f; }
+
+    let r = cosmxState.rotation;
+    let f = cosmxState.flipX;
+
+    if (cosmxState.flipY) {
+        r = (r + 180) % 360;
+        f = !f;
+    }
+
     cosmxData.tiledImage.setRotation(r, true);
     cosmxData.tiledImage.setFlip(f);
 }
 
 function setScale(sc) {
     if (!cosmxData?.tiledImage || !viewerLeft.world.getItemAt(0)) return;
+
     cosmxState.scale = sc;
+
     cosmxData.tiledImage.setWidth(
-        viewerLeft.world.getItemAt(0).getBounds().width * sc, true);
+        viewerLeft.world.getItemAt(0).getBounds().width * sc,
+        true
+    );
 }
 
 function updateAlignUI() {
-    const rs = el('rotSlider');   if (rs) rs.value      = cosmxState.rotation;
-    const rv = el('rotVal');      if (rv) rv.textContent = cosmxState.rotation;
-    const ss = el('scaleSlider'); if (ss) ss.value       = cosmxState.scale;
-    const sv = el('scaleVal');    if (sv) sv.textContent  = cosmxState.scale.toFixed(2);
+    const rs = el('rotSlider');
+    if (rs) rs.value = cosmxState.rotation;
+
+    const rv = el('rotVal');
+    if (rv) rv.textContent = cosmxState.rotation;
+
+    const ss = el('scaleSlider');
+    if (ss) ss.value = cosmxState.scale;
+
+    const sv = el('scaleVal');
+    if (sv) sv.textContent = cosmxState.scale.toFixed(2);
+
     el('btnFlipX')?.classList.toggle('on', cosmxState.flipX);
     el('btnFlipY')?.classList.toggle('on', cosmxState.flipY);
+
     document.querySelectorAll('.pr button').forEach(b =>
-        b.classList.toggle('active', parseInt(b.dataset.r) === cosmxState.rotation));
+        b.classList.toggle('active', parseInt(b.dataset.r) === cosmxState.rotation)
+    );
+}
+
+function saveCosMxPosition() {
+    savePosition();
 }
 
 function savePosition() {
     if (!cosmxData?.tiledImage) return;
+
     const b  = cosmxData.tiledImage.getBounds();
     const hb = viewerLeft.world.getItemAt(0)?.getBounds() || {width:1, height:1};
+
     const out = {
-        version:    '4.0',
-        slide_id:   currentSlideId,
+        version: '4.0',
+        slide_id: currentSlideId,
         transform: {
             rotation:   cosmxState.rotation,
             flipX:      cosmxState.flipX,
@@ -436,105 +629,144 @@ function savePosition() {
             scale:      cosmxState.scale,
         },
     };
+
     console.log(JSON.stringify(out, null, 2));
     alert('Saved to console.');
 }
 
 // ── SYNC ──────────────────────────────────────────────────────────────────
-/**
- * [개편된 sync 로직]
- *
- * 이전 방식: pan/zoom 이벤트마다 delta를 계산해서 right에 더함
- *   → lastCenter/lastZoom 누적 오차 → sync ON/OFF 후 튀는 버그
- *
- * 새 방식: sync ON 시점에 두 viewport의 offset/zoomRatio를 한 번만 저장
- *   → Left가 움직일 때마다 "Left 현재값 + 고정 offset"을 Right에 직접 set
- *   → 누적 오차 없음, 어떤 상태에서 켜도 현재 위치 그대로 유지
- */
-function setupSync() {
-    viewerLeft.addHandler('pan', () => {
-        if (!syncEnabled || isSyncing || !viewerRight.viewport) return;
-        isSyncing = true;
-        try {
-            const lc = viewerLeft.viewport.getCenter();
-            viewerRight.viewport.panTo(
-                new OpenSeadragon.Point(lc.x + syncOffsetX, lc.y + syncOffsetY), true
-            );
-        } finally { isSyncing = false; }
-    });
+// 핵심 변경:
+// Sync ON 시 오른쪽 CosMx를 왼쪽 H&E 좌표로 강제로 맞추지 않음.
+// 오른쪽은 현재 위치 그대로 두고, 이후 왼쪽 H&E의 pan/zoom 변화량만 따라감.
 
-    viewerLeft.addHandler('zoom', () => {
-        if (!syncEnabled || isSyncing || !viewerRight.viewport) return;
+function captureLeftSyncState() {
+    if (!viewerLeft?.viewport) {
+        syncLastLeft = null;
+        return;
+    }
+
+    syncLastLeft = {
+        center: viewerLeft.viewport.getCenter().clone(),
+        zoom:   viewerLeft.viewport.getZoom(),
+    };
+}
+
+function setupSync() {
+    if (!viewerLeft || !viewerRight || viewerLeft._deltaSyncInstalled) return;
+
+    viewerLeft._deltaSyncInstalled = true;
+
+    viewerLeft.addHandler('viewport-change', () => {
+        if (!viewerLeft?.viewport) return;
+
+        const curCenter = viewerLeft.viewport.getCenter();
+        const curZoom   = viewerLeft.viewport.getZoom();
+
+        if (!syncEnabled || isSyncing || !viewerRight?.viewport) {
+            syncLastLeft = {
+                center: curCenter.clone(),
+                zoom: curZoom
+            };
+            return;
+        }
+
+        if (!syncLastLeft) {
+            syncLastLeft = {
+                center: curCenter.clone(),
+                zoom: curZoom
+            };
+            return;
+        }
+
+        const dx = curCenter.x - syncLastLeft.center.x;
+        const dy = curCenter.y - syncLastLeft.center.y;
+        const zoomRatio = syncLastLeft.zoom > 0
+            ? curZoom / syncLastLeft.zoom
+            : 1;
+
+        // 먼저 baseline 업데이트해서 중복 적용 방지
+        syncLastLeft = {
+            center: curCenter.clone(),
+            zoom: curZoom
+        };
+
+        if (
+            Math.abs(dx) < 1e-12 &&
+            Math.abs(dy) < 1e-12 &&
+            Math.abs(zoomRatio - 1) < 1e-9
+        ) {
+            return;
+        }
+
         isSyncing = true;
+
         try {
-            const lz = viewerLeft.viewport.getZoom();
-            const lc = viewerLeft.viewport.getCenter();
-            viewerRight.viewport.zoomTo(lz * syncZoomRatio, null, true);
-            // zoom 시 center도 같이 보정 (OSD는 zoom 중심점이 달라질 수 있음)
-            viewerRight.viewport.panTo(
-                new OpenSeadragon.Point(lc.x + syncOffsetX, lc.y + syncOffsetY), true
+            const rv = viewerRight.viewport;
+            const rc = rv.getCenter();
+            const rz = rv.getZoom();
+
+            // 오른쪽 현재 zoom 기준으로 왼쪽 zoom 변화율만 적용
+            rv.zoomTo(rz * zoomRatio, null, true);
+
+            // 오른쪽 현재 center 기준으로 왼쪽 pan 변화량만 적용
+            rv.panTo(
+                new OpenSeadragon.Point(rc.x + dx, rc.y + dy),
+                true
             );
-        } finally { isSyncing = false; }
+        } finally {
+            isSyncing = false;
+        }
     });
 }
 
 function toggleSync() {
     syncEnabled = !syncEnabled;
 
-    if (syncEnabled) {
-        // sync ON 시점의 두 viewport 상태 차이를 offset으로 저장
-        // → 이후 Left가 어디로 움직여도 Right는 이 차이만큼 떨어진 채로 따라옴
-        _captureSyncOffset();
-
-        // sync ON 즉시 Right를 현재 offset 기준 위치로 snap
-        // → 이게 없으면 첫 pan/zoom 이벤트 전까지 Right가 튀어보임
-        if (viewerRight?.viewport && viewerLeft?.viewport) {
-            const lc = viewerLeft.viewport.getCenter();
-            const lz = viewerLeft.viewport.getZoom();
-            isSyncing = true;
-            try {
-                viewerRight.viewport.zoomTo(lz * syncZoomRatio, null, true);
-                viewerRight.viewport.panTo(
-                    new OpenSeadragon.Point(lc.x + syncOffsetX, lc.y + syncOffsetY), true
-                );
-            } finally { isSyncing = false; }
-        }
-    }
+    // 중요:
+    // Sync ON 순간에는 오른쪽을 움직이지 않고,
+    // 왼쪽의 현재 상태만 baseline으로 저장함.
+    captureLeftSyncState();
 
     const btn = el('btnSync');
     if (btn) {
         btn.textContent = syncEnabled ? 'Sync: ON' : 'Sync: OFF';
         btn.classList.toggle('on', syncEnabled);
     }
-    el('syncStatus').textContent = syncEnabled ? '🔄 Synced' : '🔓 Independent';
+
+    const st = el('syncStatus');
+    if (st) {
+        st.textContent = syncEnabled
+            ? 'Following H&E movement only'
+            : 'Independent panels';
+    }
 }
 
-/**
- * 현재 두 viewport의 차이를 offset/zoomRatio로 저장.
- * - toggleSync() 에서 sync를 켤 때 호출
- * - 두 이미지를 재정렬한 뒤 sync를 다시 켤 때도 자동으로 새 offset이 캡처됨
- */
-function _captureSyncOffset() {
-    if (!viewerLeft?.viewport || !viewerRight?.viewport) return;
-    const lc = viewerLeft.viewport.getCenter();
-    const rc = viewerRight.viewport.getCenter();
-    const lz = viewerLeft.viewport.getZoom();
-    const rz = viewerRight.viewport.getZoom();
-    syncOffsetX   = rc.x - lc.x;
-    syncOffsetY   = rc.y - lc.y;
-    syncZoomRatio = (lz > 0) ? rz / lz : 1;
+function resyncPanels() {
+    // 기존처럼 H&E 좌표로 CosMx를 강제 이동하지 않음.
+    // 현재 위치를 유지하고 baseline만 다시 잡음.
+    captureLeftSyncState();
+
+    const st = el('syncStatus');
+    if (st) {
+        st.textContent = syncEnabled
+            ? 'Sync baseline reset'
+            : 'Independent panels';
+    }
 }
 
 // ── SIDE PANEL ────────────────────────────────────────────────────────────
 function toggleSidePanel() {
     sidePanelOpen = !sidePanelOpen;
+
     el('sidePanel').classList.toggle('collapsed', !sidePanelOpen);
     el('expandBtn').style.display = sidePanelOpen ? 'none' : 'block';
 }
 
 // ── UTILS ─────────────────────────────────────────────────────────────────
 function updateAnnoCount(v) {
-    const e = el('annoCount'); if (!e) return;
+    const e = el('annoCount');
+    if (!e) return;
+
     e.textContent = (typeof v === 'number')
         ? v
         : ((annotorious?.getAnnotations().length || 0) + (pointOverlayState?.count || 0));
@@ -543,10 +775,12 @@ function updateAnnoCount(v) {
 function setViewerEmpty(isEmpty) {
     const empty  = el('emptyState');
     const panels = el('panelsWrap');
+
     if (empty)  empty.style.display  = isEmpty ? 'flex' : 'none';
     if (panels) panels.style.display = isEmpty ? 'none' : 'flex';
 }
 
 function statusText(msg) {
-    const e = el('statusText'); if (e) e.textContent = msg;
+    const e = el('statusText');
+    if (e) e.textContent = msg;
 }
