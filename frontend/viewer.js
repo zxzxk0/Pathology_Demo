@@ -485,6 +485,20 @@ function toggleSync() {
         // sync ON 시점의 두 viewport 상태 차이를 offset으로 저장
         // → 이후 Left가 어디로 움직여도 Right는 이 차이만큼 떨어진 채로 따라옴
         _captureSyncOffset();
+
+        // sync ON 즉시 Right를 현재 offset 기준 위치로 snap
+        // → 이게 없으면 첫 pan/zoom 이벤트 전까지 Right가 튀어보임
+        if (viewerRight?.viewport && viewerLeft?.viewport) {
+            const lc = viewerLeft.viewport.getCenter();
+            const lz = viewerLeft.viewport.getZoom();
+            isSyncing = true;
+            try {
+                viewerRight.viewport.zoomTo(lz * syncZoomRatio, null, true);
+                viewerRight.viewport.panTo(
+                    new OpenSeadragon.Point(lc.x + syncOffsetX, lc.y + syncOffsetY), true
+                );
+            } finally { isSyncing = false; }
+        }
     }
 
     const btn = el('btnSync');
