@@ -93,15 +93,26 @@ body {
   padding:0.7rem 2rem; background:var(--accent); color:var(--bg); border:none;
   border-radius:8px; font-size:0.9rem; font-weight:700; cursor:pointer; margin-top:0.5rem;
 }
-.panels-wrap { flex:1; display:flex; gap:2px; background:var(--border); min-width:0; }
-.vp { flex:1; display:flex; flex-direction:column; background:var(--bg); min-width:0; }
+.panels-wrap { flex:1; display:flex; gap:2px; background:var(--border); min-width:0; overflow:hidden; }
+.vp { flex:1; display:flex; flex-direction:column; background:var(--bg); min-width:0; overflow:hidden; }
 .vp-hdr {
   background:var(--surface); padding:0.5rem 0.8rem; font-size:0.78rem; font-weight:600;
   color:var(--accent); text-transform:uppercase; letter-spacing:0.5px;
   border-bottom:1px solid var(--border); flex-shrink:0;
 }
-.vp-body { flex:1; position:relative; min-height:0; }
-#viewerLeft, #viewerRight { position:absolute; inset:0; }
+.vp-body { flex:1; position:relative; min-height:0; overflow:hidden; }
+#viewerLeft, #viewerRight {
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  overflow:hidden;
+  transform-origin:center center;
+}
+#viewerLeft .openseadragon-container,
+#viewerRight .openseadragon-container {
+  overflow:hidden !important;
+}
 .status-bar {
   background:rgba(22,33,62,0.95); padding:0.4rem 1.2rem; font-size:0.78rem;
   color:var(--muted); display:flex; justify-content:space-between; align-items:center;
@@ -363,6 +374,22 @@ body {
         <div class="legend-row"><div class="cbox" style="background:rgba(155,89,182,.5);border:2px solid #9b59b6"></div>Other / In-situ</div>
         <div class="legend-row"><div class="cbox" style="background:rgba(0,255,255,.3);border:2px solid #0ff"></div>Lymphocyte</div>
       </div>
+
+      <!-- ADDED: Draw Annotation (polygon) -->
+      <div class="cg">
+        <h4>Draw Annotation</h4>
+        <div class="crow">
+          <button class="sbtn" id="btnDrawLabel-tumor"  data-label="tumor"  onclick="setDrawLabel('tumor')">Tumor</button>
+          <button class="sbtn" id="btnDrawLabel-stroma" data-label="stroma" onclick="setDrawLabel('stroma')">Stroma</button>
+        </div>
+        <div class="crow" style="margin-top:0.4rem;">
+          <button class="sbtn" id="btnDrawLabel-other"      data-label="other"      onclick="setDrawLabel('other')">Other</button>
+          <button class="sbtn" id="btnDrawLabel-lymphocyte" data-label="lymphocyte" onclick="setDrawLabel('lymphocyte')">Lymphocyte</button>
+        </div>
+        <button class="sbtn" id="btnDrawPolygon" style="margin-top:0.6rem;width:100%;" onclick="toggleDrawPolygon()">Draw Polygon</button>
+        <button class="sbtn danger" id="btnDeleteSelected" style="margin-top:0.4rem;width:100%;" onclick="deleteSelectedAnnotation()">Delete Selected</button>
+      </div>
+      <!-- END ADDED -->
       <div class="cg">
         <h4>CosMx Manual Align</h4>
         <div class="sw">
@@ -1884,11 +1911,11 @@ async function loadSlide(slide) {
   // Annotorious with class-color formatter
   try {
     S.anno = OpenSeadragon.Annotorious(S.osdHE, {
-      locale: 'auto',
-      widgets: [{ widget: 'COMMENT' }],
+      allowEmpty: true,
+      drawOnSingleClick: false,
+      disableEditor: true,
       formatter: annoFormatter
     });
-    S.anno.on('createAnnotation', () => updateAnnoCount(1));
     S.anno.on('deleteAnnotation', () => updateAnnoCount(-1));
     // Restore saved annotations
     const saved = localStorage.getItem('anno_' + slide.id);
@@ -1897,6 +1924,36 @@ async function loadSlide(slide) {
     }
     S.annoCount = S.anno.getAnnotations().length;
     document.getElementById('annoCount').textContent = S.annoCount;
+
+    // ADDED: polygon drawing support
+    S.anno.setDrawingTool('polygon');
+    S.anno.setDrawingEnabled(false);
+    S.drawLabel = S.drawLabel || 'tumor';
+    setDrawLabel(S.drawLabel);
+
+    S.anno.on('createAnnotation', (anno) => {
+      const labeled = {
+        ...anno,
+        body: [{ type: 'TextualBody', purpose: 'tagging', value: S.drawLabel }]
+      };
+
+      S.anno.removeAnnotation(anno.id);
+
+      setTimeout(() => {
+        S.anno.addAnnotation(labeled);
+        updateAnnoCount(1);
+        console.log('✅ Created:', S.drawLabel);
+
+        setTimeout(() => {
+          const allAnnos = S.anno.getAnnotations();
+          S.anno.setAnnotations(allAnnos);
+        }, 50);
+      }, 10);
+
+      S.anno.setDrawingEnabled(false);
+      const btn = document.getElementById('btnDrawPolygon');
+      if (btn) { btn.classList.remove('on'); btn.textContent = 'Draw Polygon'; }
+    });
   } catch(e) { console.warn('Annotorious init:', e); }
 
   // Lymphocyte overlay handlers
@@ -2084,6 +2141,38 @@ function _updateQCBadge(s) {
   if (!b) return;
   b.className = 'qc-badge' + (s ? ' ' + s : '');
   b.textContent = s ? (s === 'approved' ? 'Approved' : 'Rejected') : 'Unreviewed';
+}
+
+// ── ADDED: Draw Annotation (polygon) controls ──────────────────────────────
+
+function setDrawLabel(label) {
+  S.drawLabel = label;
+  ['tumor', 'stroma', 'other', 'lymphocyte'].forEach(l => {
+    const b = document.getElementById('btnDrawLabel-' + l);
+    if (b) b.classList.toggle('on', l === label);
+  });
+}
+
+function toggleDrawPolygon() {
+  if (!S.anno) return;
+  const btn = document.getElementById('btnDrawPolygon');
+  const enabling = !(btn && btn.classList.contains('on'));
+  S.anno.setDrawingEnabled(enabling);
+  if (enabling) {
+    if (btn) { btn.classList.add('on'); btn.textContent = 'Drawing… (click to finish)'; }
+  } else {
+    if (btn) { btn.classList.remove('on'); btn.textContent = 'Draw Polygon'; }
+  }
+}
+
+function deleteSelectedAnnotation() {
+  if (!S.anno) return;
+  const sel = S.anno.getSelected ? S.anno.getSelected() : null;
+  if (!sel) { alert('Click an annotation to select it first.'); return; }
+  if (confirm('Delete selected annotation?')) {
+    S.anno.removeAnnotation(sel.id);
+    updateAnnoCount(-1);
+  }
 }
 
 // ── CosMx manual alignment ────────────────────────────────────────────────
