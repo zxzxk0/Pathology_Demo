@@ -838,9 +838,23 @@ function normalizeAnnoClassName(value) {
 }
 
 function annotationClassFromAnnotation(annotation) {
-  const body = Array.isArray(annotation?.body) ? annotation.body : [];
-  const tag = body.find(b => b?.purpose === 'tagging' && b?.value);
-  return normalizeAnnoClassName(tag?.value || 'other');
+  // Robustly read class labels from both Annotorious WebAnnotation body
+  // and imported/exported GeoJSON-like properties. Missing labels must not
+  // silently become purple unless they are truly "other".
+  const rawBody = annotation?.body;
+  const body = Array.isArray(rawBody) ? rawBody : (rawBody ? [rawBody] : []);
+
+  const tag = body.find(b =>
+    (b?.purpose === 'tagging' || b?.type === 'TextualBody') &&
+    (b?.value || b?.label || b?.name)
+  );
+
+  const props = annotation?.properties || annotation?.target?.properties || {};
+  const cls = tag?.value || tag?.label || tag?.name ||
+              props?.classification?.name || props?.className ||
+              props?.label || props?.name || annotation?.className || '';
+
+  return normalizeAnnoClassName(cls || 'other');
 }
 
 function styleForAnnoClass(className) {
@@ -1932,27 +1946,27 @@ async function loadSlide(slide) {
     setDrawLabel(S.drawLabel);
 
     S.anno.on('createAnnotation', (anno) => {
+      const cls = normalizeAnnoClassName(S.drawLabel || 'tumor');
       const labeled = {
         ...anno,
-        body: [{ type: 'TextualBody', purpose: 'tagging', value: S.drawLabel }]
+        body: [{ type: 'TextualBody', purpose: 'tagging', value: cls }],
+        properties: { ...(anno.properties || {}), label: cls }
       };
 
-      S.anno.removeAnnotation(anno.id);
-
+      // Re-add once with a stable tagging body. Avoid repeated setAnnotations(),
+      // because it can confuse Annotorious drawing state after several polygons.
+      try { S.anno.removeAnnotation(anno.id); } catch(e) {}
       setTimeout(() => {
-        S.anno.addAnnotation(labeled);
-        updateAnnoCount(1);
-        console.log('✅ Created:', S.drawLabel);
+        try {
+          S.anno.addAnnotation(labeled);
+          updateAnnoCount(1);
+          console.log('✅ Created:', cls);
+        } catch(e) {
+          console.warn('add labeled annotation failed:', e);
+        }
+      }, 0);
 
-        setTimeout(() => {
-          const allAnnos = S.anno.getAnnotations();
-          S.anno.setAnnotations(allAnnos);
-        }, 50);
-      }, 10);
-
-      S.anno.setDrawingEnabled(false);
-      const btn = document.getElementById('btnDrawPolygon');
-      if (btn) { btn.classList.remove('on'); btn.textContent = 'Draw Polygon'; }
+      setHEDrawingMode(false);
     });
   } catch(e) { console.warn('Annotorious init:', e); }
 
@@ -2153,16 +2167,35 @@ function setDrawLabel(label) {
   });
 }
 
+function setHEDrawingMode(enabled) {
+  if (!S.anno) return;
+  const btn = document.getElementById('btnDrawPolygon');
+
+  // Drawing and OpenSeadragon pan must be mutually exclusive.
+  if (S.osdHE?.gestureSettingsMouse) {
+    S.osdHE.gestureSettingsMouse.clickToZoom = false;
+    S.osdHE.gestureSettingsMouse.dragToPan = !enabled;
+  }
+
+  try {
+    S.anno.setDrawingTool('polygon');
+    S.anno.setDrawingEnabled(!!enabled);
+  } catch(e) {
+    console.warn('setHEDrawingMode failed:', e);
+  }
+
+  if (btn) {
+    btn.classList.toggle('on', !!enabled);
+    btn.textContent = enabled ? 'Drawing… double-click to finish' : 'Draw Polygon';
+  }
+}
+
 function toggleDrawPolygon() {
   if (!S.anno) return;
   const btn = document.getElementById('btnDrawPolygon');
   const enabling = !(btn && btn.classList.contains('on'));
-  S.anno.setDrawingEnabled(enabling);
-  if (enabling) {
-    if (btn) { btn.classList.add('on'); btn.textContent = 'Drawing… (click to finish)'; }
-  } else {
-    if (btn) { btn.classList.remove('on'); btn.textContent = 'Draw Polygon'; }
-  }
+  setHEDrawingMode(false);
+  if (enabling) setTimeout(() => setHEDrawingMode(true), 0);
 }
 
 function deleteSelectedAnnotation() {
@@ -2707,6 +2740,17 @@ async function confirmAnchors() {
  * Annotorious stores annotations as W3C Web Annotations with SvgSelector.
  * Passing raw GeoJSON to addAnnotation() silently fails -- conversion is required.
  */
+function _featureClassName(feat) {
+  const p = feat?.properties || {};
+  return p?.classification?.name ||
+         p?.className ||
+         p?.label ||
+         p?.name ||
+         p?.type ||
+         p?.objectType ||
+         '';
+}
+
 function _geojsonToAnnotation(feat) {
   const geo  = feat.geometry || {};
   if (geo.type !== 'Polygon') return null;
@@ -2718,19 +2762,19 @@ function _geojsonToAnnotation(feat) {
   const pts = outer.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
   const svg = '<svg><polygon points="' + pts + '"/></svg>';
 
-  // Classification -> annotation tag
-  // QuPath-style GeoJSON stores class in properties.classification.name.
-  // Keep the class as a tagging body so Annotorious formatter can color/fill it.
-  const cls  = (feat.properties && feat.properties.classification
-                  ? feat.properties.classification.name : '') || '';
-  const body = cls ? [{ type: 'TextualBody', purpose: 'tagging', value: cls }] : [];
+  // Classification -> annotation tag.
+  // Support QuPath (classification.name), our exported GeoJSON (label),
+  // and common alternatives (name/className/type). This prevents everything
+  // from falling back to "other" purple.
+  const cls = normalizeAnnoClassName(_featureClassName(feat) || 'other');
 
   return {
     '@context': 'http://www.w3.org/ns/anno.jsonld',
     id:   String(feat.id || ('#' + Math.random().toString(36).substr(2, 9))),
     type: 'Annotation',
-    body,
-    target: { selector: { type: 'SvgSelector', value: svg } }
+    body: [{ type: 'TextualBody', purpose: 'tagging', value: cls }],
+    target: { selector: { type: 'SvgSelector', value: svg } },
+    properties: { label: cls }
   };
 }
 
@@ -2745,10 +2789,9 @@ function _flattenGeoJSON(raw) {
 
   feats.forEach(feat => {
     const geo = feat.geometry || {};
-    const cls = (feat.properties && feat.properties.classification)
-                  ? feat.properties.classification.name : '';
+    const cls = _featureClassName(feat);
 
-    if (cls === 'Region*') { skipped++; return; }
+    if (normalizeAnnoClassName(cls) === 'region') { skipped++; return; }
 
     if (geo.type === 'Polygon') {
       out.push(feat);
