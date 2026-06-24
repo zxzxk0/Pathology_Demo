@@ -1,0 +1,21 @@
+e:
+
+cd E:\Pathology_Demo\docs
+
+python -m http.server 8080
+
+http://localhost:8080/
+
+cd E:\Pathology_Demo
+
+python generate_manifest.py
+
+cd E:\Pathology_Demo
+
+git add -A
+
+git commit -m "fix: polygon drawing and annotation fixes"
+
+git pull --rebase
+
+git push
