@@ -43,6 +43,8 @@ body {
 }
 .hbtn:hover { background:var(--accent); color:var(--bg); border-color:var(--accent); }
 .hbtn.on    { background:var(--ok);   color:white; border-color:var(--ok); }
+.hbtn.window-on  { background:var(--warn); color:var(--bg); border-color:var(--warn); font-weight:700; }
+.hbtn.window-off { background:var(--card); color:var(--muted); border-color:var(--border); }
 .hbtn.new   { background:var(--accent); color:var(--bg); font-weight:700; border:none; }
 .v-body { flex:1; display:flex; min-height:0; }
 .side-panel {
@@ -349,12 +351,10 @@ body {
     <select id="slideSelect" onchange="onSlideChange(this.value)"><option value="">Select slide...</option></select>
     <span class="slide-chip" id="viewerSlideChip">—</span>
     <div class="hactions">
+      <button class="hbtn window-on" id="btnCosMx" onclick="toggleCosMx()" title="Show or hide the right comparison window">Window: ON</button>
       <button class="hbtn" id="btnSync" onclick="toggleSync()">Sync: OFF</button>
       <button class="hbtn" onclick="resyncPanels()">Re-sync</button>
-      <button class="hbtn on" id="btnCosMx" onclick="toggleCosMx()">CosMx: ON</button>
-      <button class="hbtn on" id="btnRightBase" onclick="toggleRightBase()" title="Switch the right comparison viewer between registered CosMx and original H&amp;E">Right: CosMx</button>
-      <input type="file" id="importInput" accept=".json,.geojson" style="display:none" onchange="onImportFile(this)">
-      <button class="hbtn" onclick="document.getElementById('importInput').click()">Import Annotations</button>
+      <button class="hbtn on" id="btnRightBase" onclick="toggleRightBase()" title="Switch the right comparison window between registered CosMx and original H&amp;E">Right: CosMx</button>
       <button class="hbtn new" onclick="goRegister()">+ Register New Slide</button>
       <!-- ADDED: logo.png — 타일 서버를 통해 서빙 (exe 빌드 시에도 동작) -->
       <img src="/Pathology_Demo/logo.png" alt="Cell type legend" style="height:44px;width:auto;object-fit:contain;flex-shrink:0;margin-left:0.3rem;">
@@ -390,6 +390,8 @@ body {
           <button class="sbtn" id="btnDrawLabel-lymphocyte" data-label="lymphocyte" onclick="setDrawLabel('lymphocyte')">Lymphocyte</button>
         </div>
         <button class="sbtn" id="btnDrawPolygon" style="margin-top:0.6rem;width:100%;" onclick="toggleDrawPolygon()">Draw Polygon</button>
+        <button class="sbtn" id="btnSaveAnnotations" style="margin-top:0.4rem;width:100%;" onclick="saveAnnotationsGeoJSON()">Save Polygon GeoJSON</button>
+        <button class="sbtn" id="btnClearImported" style="margin-top:0.4rem;width:100%;" onclick="clearImportedAnnotations()">Clear Imported GeoJSON</button>
         <button class="sbtn danger" id="btnDeleteSelected" style="margin-top:0.4rem;width:100%;" onclick="deleteSelectedAnnotation()">Delete Selected</button>
       </div>
       <!-- END ADDED -->
@@ -419,10 +421,19 @@ body {
       <!-- ADDED: Confidence Threshold section -->
       <div class="cg">
         <h4>AI Lymphocyte Threshold</h4>
+        <input type="file" id="importInput" accept=".json,.geojson" style="display:none" onchange="onImportFile(this)">
+        <button class="sbtn" style="width:100%;margin-bottom:0.4rem;"
+                onclick="document.getElementById('importInput').click()">
+          Import Annotations
+        </button>
         <input type="file" id="thImportInput" accept=".json,.geojson" style="display:none">
         <button class="sbtn" style="width:100%;margin-bottom:0.4rem;"
                 onclick="document.getElementById('thImportInput').click()">
           Import Lymphocyte GeoJSON
+        </button>
+        <button class="sbtn danger" style="width:100%;margin-bottom:0.4rem;"
+                onclick="clearLymphocyteOverlay()">
+          Clear Lymphocyte Overlay
         </button>
         <select id="thCellType" disabled
                 style="width:100%;padding:4px 6px;font-size:0.74rem;background:var(--card);
@@ -783,6 +794,7 @@ const S = {
   anchorCosmxOriginalUrl: '', anchorCosmxBaseImg: null,
   anchorCosmxRotation: 0, anchorCosmxFlipX: false, anchorCosmxFlipY: false,
   heImgLoaded: false, cosmxImgLoaded: false,
+  importedAnnoIds: [],
 };
 const ZOOM = {
   he:    { scale:1, tx:0, ty:0, _drag:false, _sx:0, _sy:0, _moved:false },
@@ -1700,17 +1712,24 @@ function thImportLymp(gj) {
   TH.features = gj.features || [];
   TH.scores   = TH.features.map(f => {
     const m = f.properties?.measurements;
-    if (!Array.isArray(m)) return 0;
+    if (!Array.isArray(m)) return 1; // polygon-only GeoJSON often has no score; keep visible
     const s = m.find(x => x.name === 'wbf_score');
-    return s ? s.value : 0;
+    return s ? Number(s.value || 0) : 1;
   });
   const names = [...new Set(TH.features.map(f => f.properties?.classification?.name || 'Unknown'))];
+  const geomTypes = [...new Set(TH.features.map(f => f.geometry?.type || 'Unknown'))];
   const sel = document.getElementById('thCellType');
-  sel.innerHTML = ''; names.forEach(n => sel.add(new Option(n, n))); sel.disabled = false;
+  sel.innerHTML = '';
+  names.forEach(n => sel.add(new Option(n, n)));
+  sel.disabled = false;
   document.getElementById('thNoData').style.display = 'none';
   thBuildHist(TH.scores);
   thApply(TH.threshold);
-  statusText('Loaded ' + TH.features.length.toLocaleString() + ' lymphocytes');
+  statusText(
+    'Loaded ' + TH.features.length.toLocaleString() +
+    ' features (' + geomTypes.join(', ') + '). ' +
+    (geomTypes.every(t => t === 'Point') ? 'Point GeoJSON is displayed as dots.' : 'Polygon GeoJSON is displayed as filled outlines.')
+  );
 }
 
 function thBuildHist(scores) {
@@ -1920,8 +1939,9 @@ async function toggleRightBase() {
     if (panel) panel.style.display = 'flex';
     const btnCos = document.getElementById('btnCosMx');
     if (btnCos) {
-      btnCos.textContent = 'CosMx: ON';
-      btnCos.classList.add('on');
+      btnCos.textContent = 'Window: ON';
+      btnCos.classList.add('window-on');
+      btnCos.classList.remove('window-off');
     }
   }
 
@@ -1968,6 +1988,14 @@ async function onSlideChange(id) {
 }
 
 async function loadSlide(slide) {
+  // New slide must start clean: imported GeoJSON overlays are slide-specific.
+  // Otherwise threshold dots/polygons or imported Annotorious SVGs can remain
+  // visually on top of the next slide.
+  try { if (S.anno && S.anno.destroy) S.anno.destroy(); } catch(e) {}
+  S.anno = null;
+  S.importedAnnoIds = [];
+  if (typeof clearLymphocyteOverlay === 'function') clearLymphocyteOverlay(true);
+
   S.current = slide;
   S.rightBase = 'cosmx';
   S.rightHeDzi = getSlideDziUrl(slide);
@@ -2075,8 +2103,13 @@ function updateAnnoCount(delta) {
   document.getElementById('annoCount').textContent = S.annoCount;
   if (S.anno && S.current) {
     try {
+      // Persist only manual/user-drawn annotations. Imported GeoJSON is treated
+      // as a temporary overlay unless the user explicitly exports it with Save.
+      const manualOnly = S.anno.getAnnotations().filter(a =>
+        !(a?.properties?.imported === true || a?.properties?.source === 'imported_geojson')
+      );
       localStorage.setItem('anno_' + S.current.id,
-        JSON.stringify(S.anno.getAnnotations()));
+        JSON.stringify(manualOnly));
     } catch(e) {}
   }
 }
@@ -2190,8 +2223,9 @@ function toggleCosMx() {
   S.cosmxVisible = !S.cosmxVisible;
   const btn = document.getElementById('btnCosMx');
   if (btn) {
-    btn.textContent = 'CosMx: ' + (S.cosmxVisible ? 'ON' : 'OFF');
-    btn.classList.toggle('on', S.cosmxVisible);
+    btn.textContent = 'Window: ' + (S.cosmxVisible ? 'ON' : 'OFF');
+    btn.classList.toggle('window-on', S.cosmxVisible);
+    btn.classList.toggle('window-off', !S.cosmxVisible);
   }
   const panel = document.getElementById('cosmxPanel');
   if (panel) panel.style.display = S.cosmxVisible ? 'flex' : 'none';
@@ -2277,6 +2311,117 @@ function deleteSelectedAnnotation() {
     S.anno.removeAnnotation(sel.id);
     updateAnnoCount(-1);
   }
+}
+
+function refreshAnnotationCountAndSave() {
+  if (!S.anno) return;
+  try {
+    S.annoCount = S.anno.getAnnotations().length;
+    const el = document.getElementById('annoCount');
+    if (el) el.textContent = S.annoCount;
+    if (S.current) {
+      localStorage.setItem('anno_' + S.current.id, JSON.stringify(S.anno.getAnnotations()));
+    }
+  } catch(e) {
+    console.warn('refreshAnnotationCountAndSave failed:', e);
+  }
+}
+
+function clearImportedAnnotations() {
+  if (!S.anno) return;
+  const anns = S.anno.getAnnotations ? S.anno.getAnnotations() : [];
+  const importedIds = new Set(S.importedAnnoIds || []);
+  const targets = anns.filter(a =>
+    importedIds.has(a.id) ||
+    a?.properties?.imported === true ||
+    a?.properties?.source === 'imported_geojson'
+  );
+
+  if (!targets.length) {
+    alert('No imported GeoJSON annotations to clear.');
+    return;
+  }
+
+  targets.forEach(a => {
+    try { S.anno.removeAnnotation(a.id); } catch(e) { console.warn('remove imported annotation failed:', e); }
+  });
+  S.importedAnnoIds = [];
+  refreshAnnotationCountAndSave();
+  statusText('Cleared ' + targets.length + ' imported GeoJSON annotations');
+}
+
+function _downloadJSON(obj, filename) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/geo+json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function _annotationLabel(ann) {
+  const body = Array.isArray(ann?.body) ? ann.body : (ann?.body ? [ann.body] : []);
+  const tag = body.find(b => b?.value || b?.label || b?.name);
+  return normalizeAnnoClassName(tag?.value || tag?.label || tag?.name || ann?.properties?.label || 'other');
+}
+
+function _annotationToGeoJSONFeature(ann) {
+  const svg = ann?.target?.selector?.value || ann?.target?.selector?.exact || '';
+  let coords = [];
+
+  const pointsMatch = svg.match(/<polygon[^>]*points=["']([^"']+)["']/i);
+  if (pointsMatch) {
+    coords = pointsMatch[1]
+      .trim()
+      .split(/\s+/)
+      .map(pair => pair.split(',').map(Number))
+      .filter(p => p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]));
+  }
+
+  // Fallback for SVG path generated by some Annotorious versions: M x y L x y ... Z
+  if (!coords.length) {
+    const pathMatch = svg.match(/<path[^>]*d=["']([^"']+)["']/i);
+    if (pathMatch) {
+      const nums = pathMatch[1].match(/-?\d+(?:\.\d+)?/g)?.map(Number) || [];
+      for (let i = 0; i + 1 < nums.length; i += 2) coords.push([nums[i], nums[i + 1]]);
+    }
+  }
+
+  if (coords.length < 3) return null;
+  const first = coords[0], last = coords[coords.length - 1];
+  if (first[0] !== last[0] || first[1] !== last[1]) coords.push([first[0], first[1]]);
+
+  const label = _annotationLabel(ann);
+  return {
+    type: 'Feature',
+    id: ann.id,
+    properties: {
+      label,
+      classification: { name: label },
+      source: ann?.properties?.source || 'pathogene_manual_export'
+    },
+    geometry: { type: 'Polygon', coordinates: [coords] }
+  };
+}
+
+function saveAnnotationsGeoJSON() {
+  if (!S.anno) { alert('Viewer not ready.'); return; }
+  const anns = S.anno.getAnnotations ? S.anno.getAnnotations() : [];
+  const features = anns.map(_annotationToGeoJSONFeature).filter(Boolean);
+  if (!features.length) {
+    alert('No polygon annotations to save. Draw or import polygon annotations first.');
+    return;
+  }
+  const slideId = S.current?.id || 'slide';
+  _downloadJSON({
+    type: 'FeatureCollection',
+    name: slideId + '_annotations',
+    features
+  }, slideId + '_annotations.geojson');
+  statusText('Saved ' + features.length + ' polygon annotations as GeoJSON');
 }
 
 // ── CosMx manual alignment ────────────────────────────────────────────────
@@ -2904,7 +3049,13 @@ function onImportFile(input) {
       features.forEach(f => {
         const ann = _geojsonToAnnotation(f);
         if (!ann) return;
-        try { S.anno.addAnnotation(ann); added++; }
+        try {
+          ann.properties = { ...(ann.properties || {}), imported: true, source: 'imported_geojson' };
+          S.anno.addAnnotation(ann);
+          if (!S.importedAnnoIds) S.importedAnnoIds = [];
+          S.importedAnnoIds.push(ann.id);
+          added++;
+        }
         catch(err) { console.warn('addAnnotation failed:', err); }
       });
 
@@ -2927,6 +3078,77 @@ function onImportFile(input) {
 // THRESHOLD OVERLAY
 // ===========================================================================
 
+function _drawLymphPoint(ctx, ti, coords, shown, canvas) {
+  const vpPt = ti.imageToViewportCoordinates(coords[0], coords[1]);
+  const sPt  = S.osdHE.viewport.viewportToViewerElementCoordinates(vpPt);
+  if (sPt.x < -8 || sPt.x > canvas.width + 8 || sPt.y < -8 || sPt.y > canvas.height + 8) return;
+  ctx.beginPath();
+  ctx.arc(sPt.x, sPt.y, shown ? 3.8 : 2.5, 0, Math.PI * 2);
+  ctx.fillStyle = shown ? '#27ae60' : 'rgba(90,130,160,0.15)';
+  ctx.fill();
+  if (shown) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+  }
+}
+
+function _drawLymphRing(ctx, ti, ring, shown, canvas) {
+  if (!Array.isArray(ring) || ring.length < 3) return;
+  let drawn = false;
+  ctx.beginPath();
+  ring.forEach((pt, idx) => {
+    const vpPt = ti.imageToViewportCoordinates(pt[0], pt[1]);
+    const sPt  = S.osdHE.viewport.viewportToViewerElementCoordinates(vpPt);
+    if (idx === 0) ctx.moveTo(sPt.x, sPt.y);
+    else ctx.lineTo(sPt.x, sPt.y);
+    if (sPt.x >= -50 && sPt.x <= canvas.width + 50 && sPt.y >= -50 && sPt.y <= canvas.height + 50) drawn = true;
+  });
+  ctx.closePath();
+  if (!drawn) return;
+  ctx.fillStyle   = shown ? 'rgba(39,174,96,0.22)' : 'rgba(90,130,160,0.06)';
+  ctx.strokeStyle = shown ? '#27ae60' : 'rgba(90,130,160,0.20)';
+  ctx.lineWidth   = shown ? 1.3 : 0.7;
+  ctx.fill();
+  ctx.stroke();
+}
+
+
+function clearLymphocyteOverlay(silent = false) {
+  TH.features = [];
+  TH.scores = [];
+  TH_BINS = [];
+  TH.threshold = 0.10;
+  const slider = document.getElementById('threshSlider');
+  if (slider) slider.value = 10;
+  const val = document.getElementById('thVal');
+  if (val) val.textContent = '0.10';
+  ['thN', 'thTot', 'thH'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '—';
+  });
+  const sel = document.getElementById('thCellType');
+  if (sel) {
+    sel.innerHTML = '<option>Import to begin...</option>';
+    sel.disabled = true;
+  }
+  const noData = document.getElementById('thNoData');
+  if (noData) {
+    noData.textContent = 'No data loaded';
+    noData.style.display = 'block';
+  }
+  if (TH.chart) {
+    try { TH.chart.destroy(); } catch(e) {}
+    TH.chart = null;
+  }
+  const canvas = document.getElementById('lymphOverlay');
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  if (!silent) statusText('Cleared lymphocyte overlay');
+}
+
 function thDrawOverlay() {
   const canvas = document.getElementById('lymphOverlay');
   if (!canvas) return;
@@ -2936,17 +3158,21 @@ function thDrawOverlay() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (!TH.features.length || !S.osdHE) return;
   const ti = S.osdHE.world?.getItemAt(0); if (!ti) return;
+
   TH.features.forEach((f, i) => {
-    const score  = TH.scores[i];
-    const shown  = score >= TH.threshold;
-    const coords = f.geometry?.coordinates; if (!coords) return;
-    const vpPt   = ti.imageToViewportCoordinates(coords[0], coords[1]);
-    const sPt    = S.osdHE.viewport.viewportToViewerElementCoordinates(vpPt);
-    if (sPt.x < -5 || sPt.x > canvas.width+5 || sPt.y < -5 || sPt.y > canvas.height+5) return;
-    ctx.beginPath();
-    ctx.arc(sPt.x, sPt.y, shown ? 3.5 : 2.5, 0, Math.PI * 2);
-    ctx.fillStyle = shown ? '#27ae60' : 'rgba(90,130,160,0.15)';
-    ctx.fill();
+    const score = TH.scores[i] ?? 1;
+    const shown = score >= TH.threshold;
+    const geo = f.geometry || {};
+    const coords = geo.coordinates;
+    if (!coords) return;
+
+    if (geo.type === 'Point') {
+      _drawLymphPoint(ctx, ti, coords, shown, canvas);
+    } else if (geo.type === 'Polygon') {
+      _drawLymphRing(ctx, ti, coords[0], shown, canvas);
+    } else if (geo.type === 'MultiPolygon') {
+      (coords || []).forEach(poly => _drawLymphRing(ctx, ti, poly[0], shown, canvas));
+    }
   });
 }
 
