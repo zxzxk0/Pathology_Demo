@@ -1,0 +1,92 @@
+{
+  "version": "8.2",
+  "slide_id": "PreSCCT1_HE.ome",
+  "method": "auto_orientation_v8.2_partial_v8.1",
+  "algorithm": "hybrid v8.2 (precision/IoU auto-switch + border removal)",
+  "coverage_mode": "partial_v8.1",
+  "original_sizes": {
+    "he": [
+      37482,
+      82972
+    ],
+    "cosmx": [
+      37482,
+      82972
+    ],
+    "size_ratio": 1.0
+  },
+  "transform": {
+    "rotation": 0,
+    "flipX": false,
+    "flipY": false,
+    "translateX": 0.012987012987012988,
+    "translateY": 0.0283203125,
+    "translateX_pixels": 6,
+    "translateY_pixels": 29,
+    "scale": 0.95
+  },
+  "detection": {
+    "combined_score": 0.6039090924657362,
+    "match_score": 0.5936508178710938,
+    "iou_score": 0.5620738168955032,
+    "detection_scale": 0.95,
+    "processing_size": 1024,
+    "top_candidates": [
+      {
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "scale": 0.95,
+        "score": 0.6039,
+        "position": [
+          6,
+          29
+        ]
+      },
+      {
+        "rotation": 180,
+        "flipX": true,
+        "flipY": true,
+        "scale": 0.95,
+        "score": 0.6039,
+        "position": [
+          6,
+          29
+        ]
+      },
+      {
+        "rotation": 0,
+        "flipX": true,
+        "flipY": false,
+        "scale": 0.95,
+        "score": 0.4497,
+        "position": [
+          23,
+          28
+        ]
+      },
+      {
+        "rotation": 180,
+        "flipX": false,
+        "flipY": true,
+        "scale": 0.95,
+        "score": 0.4497,
+        "position": [
+          23,
+          28
+        ]
+      },
+      {
+        "rotation": 0,
+        "flipX": false,
+        "flipY": true,
+        "scale": 0.9,
+        "score": 0.4035,
+        "position": [
+          36,
+          103
+        ]
+      }
+    ]
+  }
+}
