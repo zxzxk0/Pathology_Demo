@@ -24,7 +24,18 @@
         "scale": 0.5457500000000002
       }
     }
+
+  
   },
+  {
+  "id": "PreSCCT1_HE.ome",
+  "dzi_url": "/Pathology_Demo/data/tiles/PreSCCT1_HE.ome/PreSCCT1_HE.ome.dzi",
+  "cosmx": {
+    "has_cosmx": true,
+    "dzi_url": "/Pathology_Demo/data/cosmx_tiles/PreSCCT1_HE.ome/PreSCCT1_HE.ome.dzi",
+    "registered": true
+  }
+},
   {
     "id": "3_13_fc7e338b-417c-0b22-4786-f43048459ceb_155215",
     "dzi_url": "/Pathology_Demo/data/tiles/3_13_fc7e338b-417c-0b22-4786-f43048459ceb_155215/3_13_fc7e338b-417c-0b22-4786-f43048459ceb_155215.dzi",
