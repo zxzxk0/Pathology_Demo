@@ -309,7 +309,7 @@ async function apiJSON(url, options = {}) {
   return data;
 }
 async function apiGetSlides() {
-  return apiJSON('/api/slides');
+  return apiJSON('./slides.json');
 }
 
 async function apiGetCosmxInfo(slideId) {
