@@ -27,13 +27,23 @@
 
   
   },
-  {
+{
   "id": "PreSCCT1_HE.ome",
   "dzi_url": "/Pathology_Demo/data/tiles/PreSCCT1_HE.ome/PreSCCT1_HE.ome.dzi",
   "cosmx": {
     "has_cosmx": true,
     "dzi_url": "/Pathology_Demo/data/cosmx_tiles/PreSCCT1_HE.ome/PreSCCT1_HE.ome.dzi",
-    "registered": true
+    "registered": true,
+    "transform": {
+      "rotation": 0,
+      "flipX": false,
+      "flipY": false,
+      "translateX": -0.021645021645021644,
+      "translateY": 0.0078125,
+      "translateX_pixels": -10,
+      "translateY_pixels": 8,
+      "scale": 0.9820150000000003
+    }
   }
 },
   {
