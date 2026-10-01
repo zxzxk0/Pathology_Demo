@@ -313,20 +313,16 @@ async function apiGetSlides() {
 }
 
 async function apiGetCosmxInfo(slideId) {
-  try {
-    return await apiJSON('/api/cosmx/' + encodeURIComponent(slideId) + '/dzi');
-  } catch(e) {
-    return { has_cosmx:false };
-  }
+  const slide = S.slides.find(s => s.id === slideId);
+  return (slide && slide.cosmx) ? slide.cosmx : { has_cosmx:false };
 }
 
 async function apiGetCosmxTransform(slideId) {
-  try {
-    return await apiJSON('/api/cosmx/' + encodeURIComponent(slideId) + '/transform');
-  } catch(e) {
-    console.warn('CosMx transform load failed:', e);
-    return { transform: 'identity' };
+  const slide = S.slides.find(s => s.id === slideId);
+  if (slide && slide.cosmx && slide.cosmx.transform) {
+    return slide.cosmx.transform;
   }
+  return { transform: 'identity' };
 }
 
 async function initWebApp() {
@@ -3737,5 +3733,8 @@ function thDrawOverlay() {
     }
   });
 }
+
+
+
 
 
