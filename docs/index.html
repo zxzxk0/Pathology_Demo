@@ -398,6 +398,38 @@ body {
   vector-effect:non-scaling-stroke;
 }
 
+
+/* ══ GENE EXPRESSION OVERLAY ═════════════════════════════════════════════ */
+.gene-card {
+  background:var(--card); border:1px solid var(--border); border-radius:8px;
+  padding:0.55rem;
+}
+.gene-mode-row { display:flex; gap:0.35rem; margin-bottom:0.5rem; }
+.gene-mode-btn {
+  flex:1; padding:0.38rem 0.3rem; font-size:0.70rem; background:var(--surface);
+  border:1px solid var(--border); color:var(--muted); border-radius:5px; cursor:pointer;
+}
+.gene-mode-btn.active { background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:700; }
+#geneSearch {
+  width:100%; padding:0.38rem 0.45rem; font-size:0.72rem; background:var(--surface);
+  border:1px solid var(--border); color:var(--text); border-radius:5px; outline:none;
+}
+#geneSearch:disabled { opacity:0.45; cursor:not-allowed; }
+.gene-gradient {
+  height:11px; margin-top:0.45rem; border-radius:999px;
+  background:linear-gradient(90deg,#2166ac 0%,#f7f7f7 50%,#b2182b 100%);
+  border:1px solid rgba(255,255,255,0.14);
+}
+.gene-scale-labels {
+  display:flex; justify-content:space-between; gap:0.25rem; margin-top:0.18rem;
+  font-size:0.59rem; color:var(--muted); font-variant-numeric:tabular-nums;
+}
+#geneStatus { margin-top:0.4rem; font-size:0.62rem; color:var(--muted); line-height:1.35; }
+#geneExpressionOverlay {
+  position:absolute; inset:0; width:100%; height:100%; z-index:25;
+  pointer-events:none; display:none;
+}
+
 </style>
 </head>
 <body>
@@ -433,6 +465,28 @@ body {
         <div class="legend-row"><div class="cbox" style="background:rgba(46,204,113,.5);border:2px solid #2ecc71"></div>Stroma</div>
         <div class="legend-row"><div class="cbox" style="background:rgba(155,89,182,.5);border:2px solid #9b59b6"></div>Other / In-situ</div>
         <div class="legend-row"><div class="cbox" style="background:rgba(0,255,255,.3);border:2px solid #0ff"></div>Lymphocyte</div>
+      </div>
+
+      <div class="cg" id="geneExpressionPanel">
+        <h4>CosMx Cell Overlay</h4>
+        <div class="gene-card">
+          <div class="gene-mode-row">
+            <button class="gene-mode-btn active" id="geneModeCellType" onclick="setGeneOverlayMode('cell-type')">Cell Type</button>
+            <button class="gene-mode-btn" id="geneModeExpression" onclick="setGeneOverlayMode('gene')">Gene Expression</button>
+          </div>
+          <div style="font-size:0.64rem;color:var(--muted);margin-bottom:0.22rem;">Gene</div>
+          <input id="geneSearch" list="geneOptions" placeholder="Select or type a gene..." disabled
+                 onchange="selectGeneExpression(this.value)"
+                 onkeydown="if(event.key==='Enter'){this.blur();selectGeneExpression(this.value);}">
+          <datalist id="geneOptions"></datalist>
+          <div class="gene-gradient"></div>
+          <div class="gene-scale-labels">
+            <span id="geneLowLabel">Low</span>
+            <span id="geneMidLabel">Mid</span>
+            <span id="geneHighLabel">High</span>
+          </div>
+          <div id="geneStatus">Available for slides with gene-expression data.</div>
+        </div>
       </div>
 
       <!-- ADDED: Draw Annotation (polygon) -->
@@ -567,7 +621,10 @@ body {
         </div>
         <div class="vp" id="cosmxPanel">
           <div class="vp-hdr" id="rightViewerHdr">Spatial Transcriptomics (CosMx)</div>
-          <div class="vp-body"><div id="viewerRight"></div></div>
+          <div class="vp-body">
+            <div id="viewerRight"></div>
+            <canvas id="geneExpressionOverlay"></canvas>
+          </div>
         </div>
       </div>
     </div>

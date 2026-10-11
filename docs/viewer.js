@@ -37,7 +37,7 @@ async function loadHeDziMeta(slideId) {
   if (!slideId) return;
 
   try {
-    const r = await fetch('/tiles/' + encodeURIComponent(slideId) + '/dzi_meta.json', { cache: 'no-store' });
+    const r = await fetch('./data/tiles/' + encodeURIComponent(slideId) + '/dzi_meta.json', { cache: 'no-store' });
     if (!r.ok) {
       console.warn('[H&E] DZI metadata not found; using 1:1 annotation coordinates.');
       return;
@@ -118,6 +118,21 @@ const ZOOM_MIN = 0.3, ZOOM_MAX = 20;
 // ADDED: Confidence threshold state
 const TH = { features:[], scores:[], threshold:0.10, useLog:false, chart:null };
 let TH_BINS = [];
+
+// Gene-expression overlay state (static GitHub Pages demo)
+const GE = {
+  mode: 'cell-type',
+  slideId: null,
+  polygons: null,
+  expression: null,
+  selectedGene: '',
+  low: 0,
+  mid: 0,
+  high: 1,
+  raf: 0,
+  loadToken: 0
+};
+
 
 // ===========================================================================
 // ANNOTATION CLASS STYLE
@@ -259,6 +274,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     window.addEventListener('resize', thResizeCanvas);
     bindThresholdControls();
+    initGeneExpressionControls();
 
     const previewOpacity = document.getElementById('previewOpacity');
     if (previewOpacity) {
@@ -1204,8 +1220,12 @@ function createRightViewer(tileSource) {
   S.osdCosMx.addOnceHandler('open', () => {
     applyCosMxTransform();
     setupSync();
+    requestGeneOverlayRedraw();
     console.log('[createRightViewer] open complete → transform applied → setupSync registered');
   });
+  S.osdCosMx.addHandler('viewport-change', requestGeneOverlayRedraw);
+  S.osdCosMx.addHandler('animation-finish', requestGeneOverlayRedraw);
+  S.osdCosMx.addHandler('resize', requestGeneOverlayRedraw);
 }
 
 async function toggleRightBase() {
@@ -1252,6 +1272,7 @@ async function toggleRightBase() {
   statusText('Switching right viewer to ' + (targetBase === 'cosmx' ? 'CosMx' : 'H&E') + '...');
   S.rightBase = targetBase;
   updateRightBaseButton();
+  updateGeneOverlayVisibility();
 
   if (!S.osdCosMx) {
     createRightViewer(targetTileSource);
@@ -1315,6 +1336,7 @@ async function loadSlide(slide) {
 
   S.current = slide;
   await loadHeDziMeta(slide.id);
+  await loadGeneExpressionForSlide(slide);
   S.rightBase = 'cosmx';
   S.rightHeDzi = getSlideDziUrl(slide);
   S.rightCosMxDzi = null;
@@ -3736,5 +3758,286 @@ function thDrawOverlay() {
 
 
 
+// ===========================================================================
+// GENE EXPRESSION OVERLAY
+// ===========================================================================
 
+function initGeneExpressionControls() {
+  const canvas = document.getElementById('geneExpressionOverlay');
+  if (canvas) canvas.style.display = 'none';
+  updateGeneOverlayControls();
+  window.addEventListener('resize', requestGeneOverlayRedraw);
+}
+
+function setGeneStatus(msg, isError=false) {
+  const el = document.getElementById('geneStatus');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+}
+
+function updateGeneOverlayControls() {
+  const cellBtn = document.getElementById('geneModeCellType');
+  const geneBtn = document.getElementById('geneModeExpression');
+  const search = document.getElementById('geneSearch');
+  const hasData = !!(GE.polygons && GE.expression);
+
+  if (cellBtn) cellBtn.classList.toggle('active', GE.mode === 'cell-type');
+  if (geneBtn) {
+    geneBtn.classList.toggle('active', GE.mode === 'gene');
+    geneBtn.disabled = !hasData;
+  }
+  if (search) search.disabled = !(hasData && GE.mode === 'gene');
+
+  updateGeneOverlayVisibility();
+}
+
+function updateGeneOverlayVisibility() {
+  const canvas = document.getElementById('geneExpressionOverlay');
+  if (!canvas) return;
+  const show = GE.mode === 'gene' &&
+               !!GE.polygons &&
+               !!GE.expression &&
+               S.rightBase === 'cosmx' &&
+               !!S.cosmxVisible;
+  canvas.style.display = show ? 'block' : 'none';
+  if (show) requestGeneOverlayRedraw();
+}
+
+async function loadGeneExpressionForSlide(slide) {
+  const token = ++GE.loadToken;
+  GE.slideId = slide?.id || null;
+  GE.polygons = null;
+  GE.expression = null;
+  GE.selectedGene = '';
+  GE.mode = 'cell-type';
+
+  const list = document.getElementById('geneOptions');
+  const input = document.getElementById('geneSearch');
+  if (list) list.innerHTML = '';
+  if (input) input.value = '';
+
+  const cfg = slide?.gene_expression;
+  if (!cfg?.polygons_url || !cfg?.expression_url) {
+    setGeneStatus('No gene-expression data for this slide.');
+    updateGeneOverlayControls();
+    return;
+  }
+
+  setGeneStatus('Loading gene-expression data...');
+  updateGeneOverlayControls();
+
+  try {
+    const [polyRes, exprRes] = await Promise.all([
+      fetch(cfg.polygons_url, { cache: 'no-store' }),
+      fetch(cfg.expression_url, { cache: 'no-store' })
+    ]);
+    if (!polyRes.ok) throw new Error('polygon data HTTP ' + polyRes.status);
+    if (!exprRes.ok) throw new Error('expression data HTTP ' + exprRes.status);
+
+    const [polygons, expression] = await Promise.all([polyRes.json(), exprRes.json()]);
+    if (token !== GE.loadToken || GE.slideId !== slide.id) return;
+
+    GE.polygons = polygons;
+    GE.expression = expression;
+
+    const geneNames = Object.keys(expression.genes || {});
+    if (list) {
+      const frag = document.createDocumentFragment();
+      geneNames.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g;
+        frag.appendChild(opt);
+      });
+      list.replaceChildren(frag);
+    }
+
+    GE.selectedGene = geneNames.includes('A2M') ? 'A2M' : (geneNames[0] || '');
+    if (input) input.value = GE.selectedGene;
+
+    if (GE.selectedGene) updateGeneScale(GE.selectedGene);
+    setGeneStatus(
+      `${(polygons.cells || []).length.toLocaleString()} cells · ${geneNames.length.toLocaleString()} genes`
+    );
+  } catch (e) {
+    console.error('[Gene Expression] load failed:', e);
+    setGeneStatus('Gene-expression data failed to load: ' + e.message, true);
+  }
+
+  updateGeneOverlayControls();
+}
+
+function setGeneOverlayMode(mode) {
+  if (mode === 'gene' && !(GE.polygons && GE.expression)) return;
+  GE.mode = mode === 'gene' ? 'gene' : 'cell-type';
+  updateGeneOverlayControls();
+
+  if (GE.mode === 'cell-type') {
+    setGeneStatus('Cell Type view: original CosMx visualization.');
+  } else {
+    setGeneStatus(
+      `${(GE.polygons?.cells || []).length.toLocaleString()} cells · ${Object.keys(GE.expression?.genes || {}).length.toLocaleString()} genes`
+    );
+    requestGeneOverlayRedraw();
+  }
+}
+
+function selectGeneExpression(gene) {
+  gene = String(gene || '').trim();
+  if (!gene || !GE.expression?.genes?.[gene]) {
+    if (gene) setGeneStatus('Gene not found: ' + gene, true);
+    return;
+  }
+  GE.selectedGene = gene;
+  const input = document.getElementById('geneSearch');
+  if (input && input.value !== gene) input.value = gene;
+  updateGeneScale(gene);
+  setGeneStatus('Showing relative expression for ' + gene + '.');
+  requestGeneOverlayRedraw();
+}
+
+function percentileSorted(sorted, p) {
+  if (!sorted.length) return 0;
+  const idx = (sorted.length - 1) * p;
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  if (lo === hi) return sorted[lo];
+  const w = idx - lo;
+  return sorted[lo] * (1 - w) + sorted[hi] * w;
+}
+
+function updateGeneScale(gene) {
+  const vals = (GE.expression?.genes?.[gene] || [])
+    .map(Number)
+    .filter(Number.isFinite)
+    .sort((a,b) => a-b);
+
+  if (!vals.length) {
+    GE.low = 0; GE.mid = 0; GE.high = 1;
+  } else {
+    GE.low  = percentileSorted(vals, 0.02);
+    GE.mid  = percentileSorted(vals, 0.50);
+    GE.high = percentileSorted(vals, 0.98);
+    if (!(GE.high > GE.low)) GE.high = GE.low + 1;
+  }
+
+  const fmt = v => {
+    const a = Math.abs(v);
+    if (a >= 1000 || (a > 0 && a < 0.01)) return v.toExponential(2);
+    if (a >= 10) return v.toFixed(1);
+    return v.toFixed(2);
+  };
+  const l = document.getElementById('geneLowLabel');
+  const m = document.getElementById('geneMidLabel');
+  const h = document.getElementById('geneHighLabel');
+  if (l) l.textContent = fmt(GE.low);
+  if (m) m.textContent = fmt(GE.mid);
+  if (h) h.textContent = fmt(GE.high);
+}
+
+function mixRGB(a, b, t) {
+  t = Math.max(0, Math.min(1, t));
+  return [
+    Math.round(a[0] + (b[0]-a[0])*t),
+    Math.round(a[1] + (b[1]-a[1])*t),
+    Math.round(a[2] + (b[2]-a[2])*t)
+  ];
+}
+
+function geneValueColor(v) {
+  const BLUE = [33,102,172], WHITE = [247,247,247], RED = [178,24,43];
+  let c;
+  if (!Number.isFinite(v)) return 'rgba(120,120,120,0.20)';
+  if (v <= GE.mid) {
+    const den = Math.max(1e-12, GE.mid - GE.low);
+    c = mixRGB(BLUE, WHITE, (v - GE.low) / den);
+  } else {
+    const den = Math.max(1e-12, GE.high - GE.mid);
+    c = mixRGB(WHITE, RED, (v - GE.mid) / den);
+  }
+  return `rgba(${c[0]},${c[1]},${c[2]},0.68)`;
+}
+
+function requestGeneOverlayRedraw() {
+  if (GE.raf) return;
+  GE.raf = requestAnimationFrame(() => {
+    GE.raf = 0;
+    drawGeneExpressionOverlay();
+  });
+}
+
+function drawGeneExpressionOverlay() {
+  const canvas = document.getElementById('geneExpressionOverlay');
+  if (!canvas || canvas.style.display === 'none') return;
+  if (GE.mode !== 'gene' || !GE.polygons || !GE.expression || !GE.selectedGene) return;
+  if (!S.osdCosMx || !S.osdCosMx.viewport) return;
+
+  const host = canvas.parentElement;
+  if (!host) return;
+  const rect = host.getBoundingClientRect();
+  if (rect.width <= 1 || rect.height <= 1) return;
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const targetW = Math.max(1, Math.round(rect.width * dpr));
+  const targetH = Math.max(1, Math.round(rect.height * dpr));
+  if (canvas.width !== targetW || canvas.height !== targetH) {
+    canvas.width = targetW;
+    canvas.height = targetH;
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+  }
+
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, rect.width, rect.height);
+
+  // Polygon coordinates supplied by Dr. Douglass are already H&E level-0 pixels.
+  // The right viewer uses the registered H&E world frame, so convert H&E pixels
+  // directly into OSD viewport coordinates rather than re-applying registration.
+  const heW = Number(S.heOriginalW || 0);
+  if (!(heW > 0)) {
+    setGeneStatus('H&E DZI metadata is required for gene-overlay alignment.', true);
+    return;
+  }
+
+  const bounds = S.osdCosMx.viewport.getBounds(true);
+  const minX = bounds.x * heW;
+  const minY = bounds.y * heW;
+  const maxX = (bounds.x + bounds.width) * heW;
+  const maxY = (bounds.y + bounds.height) * heW;
+
+  const exprVals = GE.expression.genes[GE.selectedGene] || [];
+  const cells = GE.polygons.cells || [];
+
+  ctx.lineWidth = 0.55;
+  ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+
+  let drawn = 0;
+  for (const cell of cells) {
+    const typeIdx = cell[1];
+    const pts = cell[2];
+    const b = cell[3];
+
+    if (!b || b[2] < minX || b[0] > maxX || b[3] < minY || b[1] > maxY) continue;
+    if (!pts || pts.length < 6) continue;
+
+    const v = Number(exprVals[typeIdx]);
+    ctx.fillStyle = geneValueColor(v);
+
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i += 2) {
+      const vp = new OpenSeadragon.Point(pts[i] / heW, pts[i+1] / heW);
+      const px = S.osdCosMx.viewport.pixelFromPoint(vp, true);
+      if (i === 0) ctx.moveTo(px.x, px.y);
+      else ctx.lineTo(px.x, px.y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    drawn++;
+  }
+
+  if (drawn === 0) {
+    setGeneStatus('No cell polygons are visible at the current view.');
+  }
+}
 

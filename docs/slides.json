@@ -24,28 +24,31 @@
         "scale": 0.5457500000000002
       }
     }
-
-  
   },
-{
-  "id": "PreSCCT1_HE.ome",
-  "dzi_url": "/Pathology_Demo/data/tiles/PreSCCT1_HE.ome/PreSCCT1_HE.ome.dzi",
-  "cosmx": {
-    "has_cosmx": true,
-    "dzi_url": "/Pathology_Demo/data/cosmx_tiles/PreSCCT1_HE.ome/PreSCCT1_HE.ome.dzi",
-    "registered": true,
-    "transform": {
-      "rotation": 0,
-      "flipX": false,
-      "flipY": false,
-      "translateX": -0.021645021645021644,
-      "translateY": 0.0078125,
-      "translateX_pixels": -10,
-      "translateY_pixels": 8,
-      "scale": 0.9820150000000003
+  {
+    "id": "PreSCCT1_HE.ome",
+    "dzi_url": "/Pathology_Demo/data/tiles/PreSCCT1_HE.ome/PreSCCT1_HE.ome.dzi",
+    "cosmx": {
+      "has_cosmx": true,
+      "dzi_url": "/Pathology_Demo/data/cosmx_tiles/PreSCCT1_HE.ome/PreSCCT1_HE.ome.dzi",
+      "registered": true,
+      "transform": {
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "translateX": -0.021645021645021644,
+        "translateY": 0.0078125,
+        "translateX_pixels": -10,
+        "translateY_pixels": 8,
+        "scale": 0.9820150000000003
+      }
+    },
+    "gene_expression": {
+      "polygons_url": "./data/gene_expression/PreSCCT1_HE.ome/cell_polygons.json",
+      "expression_url": "./data/gene_expression/PreSCCT1_HE.ome/gene_expression.json",
+      "coordinate_space": "he_level0_px"
     }
-  }
-},
+  },
   {
     "id": "3_13_fc7e338b-417c-0b22-4786-f43048459ceb_155215",
     "dzi_url": "/Pathology_Demo/data/tiles/3_13_fc7e338b-417c-0b22-4786-f43048459ceb_155215/3_13_fc7e338b-417c-0b22-4786-f43048459ceb_155215.dzi",
