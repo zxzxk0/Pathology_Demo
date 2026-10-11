@@ -134,7 +134,8 @@ const GE = {
   overlayCanvas: null,
   pathsByType: null,
   overlayRasterW: 2048,
-  overlayRasterH: 0
+  overlayRasterH: 0,
+  geneNames: []
 };
 
 
@@ -1469,21 +1470,36 @@ function syncCaptureLeftState() {
   }
   S._syncLast = {
     center: S.osdHE.viewport.getCenter().clone(),
-    zoom:   S.osdHE.viewport.getZoom()
+    zoom: S.osdHE.viewport.getZoom()
   };
 }
 
+function syncRightToHE(immediately=true) {
+  if (!S.osdHE?.viewport || !S.osdCosMx?.viewport) return;
+
+  const center = S.osdHE.viewport.getCenter().clone();
+  const zoom = S.osdHE.viewport.getZoom();
+
+  S.syncing = true;
+  try {
+    // Both panels use the same normalized H&E world frame.
+    S.osdCosMx.viewport.zoomTo(zoom, null, immediately);
+    S.osdCosMx.viewport.panTo(center, immediately);
+  } finally {
+    S.syncing = false;
+  }
+
+  syncCaptureLeftState();
+}
+
 function setupSync() {
-  // One-way delta sync only: H&E -> right panel.
-  // Important: this does NOT copy H&E absolute center/zoom to CosMx.
-  // The right panel keeps its current location, then follows only the
-  // movement/zoom changes made on the left after Sync is turned ON.
+  // One-way absolute sync: H&E -> right panel.
   if (S.osdHE && S._syncHE) {
     S.osdHE.removeHandler('viewport-change', S._syncHE);
     S._syncHE = null;
   }
 
-  S._syncCosMx = null;   // legacy right-to-left sync disabled on purpose
+  S._syncCosMx = null;
   S.syncing = false;
 
   if (!S.syncEnabled || !S.osdHE || !S.osdCosMx) {
@@ -1491,47 +1507,12 @@ function setupSync() {
     return;
   }
 
-  // Capture baseline at the moment sync becomes active.
-  // This prevents the right panel from jumping to the left panel's location.
-  syncCaptureLeftState();
+  // Align immediately, then keep center/zoom identical.
+  syncRightToHE(true);
 
   S._syncHE = () => {
-    if (!S.syncEnabled || S.syncing || !S.osdHE || !S.osdCosMx) return;
-    if (!S.osdHE.viewport || !S.osdCosMx.viewport) return;
-
-    const curCenter = S.osdHE.viewport.getCenter();
-    const curZoom   = S.osdHE.viewport.getZoom();
-
-    if (!S._syncLast) {
-      syncCaptureLeftState();
-      return;
-    }
-
-    const prevCenter = S._syncLast.center;
-    const prevZoom   = S._syncLast.zoom;
-    const dx = curCenter.x - prevCenter.x;
-    const dy = curCenter.y - prevCenter.y;
-    const zoomRatio = prevZoom > 0 ? curZoom / prevZoom : 1;
-
-    // Update baseline before moving the right panel, so repeated OSD events
-    // cannot reuse the same delta.
-    S._syncLast = { center: curCenter.clone(), zoom: curZoom };
-
-    if (Math.abs(dx) < 1e-12 && Math.abs(dy) < 1e-12 && Math.abs(zoomRatio - 1) < 1e-9) return;
-
-    S.syncing = true;
-    try {
-      const rv = S.osdCosMx.viewport;
-      const rc = rv.getCenter();
-      const rz = rv.getZoom();
-      const nextCenter = new OpenSeadragon.Point(rc.x + dx, rc.y + dy);
-      const nextZoom   = rz * zoomRatio;
-
-      rv.zoomTo(nextZoom, null, true);
-      rv.panTo(nextCenter, true);
-    } finally {
-      S.syncing = false;
-    }
+    if (!S.syncEnabled || S.syncing || !S.osdHE?.viewport || !S.osdCosMx?.viewport) return;
+    syncRightToHE(true);
   };
 
   S.osdHE.addHandler('viewport-change', S._syncHE);
@@ -1548,21 +1529,17 @@ function toggleSync() {
 
   const st = document.getElementById('syncStatus');
   if (st) {
-    st.textContent = S.syncEnabled
-      ? 'Following H&E movement only'
-      : 'Independent panels';
+    st.textContent = S.syncEnabled ? 'H&E and CosMx aligned' : 'Independent panels';
   }
 
   setupSync();
 }
 
 function resyncPanels() {
-  // New behavior: do not force CosMx to H&E coordinates.
-  // Just reset the baseline, so the next left-panel movement is followed
-  // from the right panel's current position.
-  syncCaptureLeftState();
+  if (S.osdHE && S.osdCosMx) syncRightToHE(true);
+
   const st = document.getElementById('syncStatus');
-  if (st) st.textContent = S.syncEnabled ? 'Sync baseline reset' : 'Independent panels';
+  if (st) st.textContent = S.syncEnabled ? 'Panels re-aligned' : 'Panels aligned once';
 }
 
 function toggleCosMx() {
@@ -3766,6 +3743,46 @@ function thDrawOverlay() {
 // ===========================================================================
 
 function initGeneExpressionControls() {
+  const input = document.getElementById('geneSearch');
+  const arrow = document.getElementById('genePickerArrow');
+
+  if (input) {
+    input.addEventListener('focus', () => {
+      if (!input.disabled) renderGeneDropdown(input.value, true);
+    });
+    input.addEventListener('input', () => {
+      if (!input.disabled) renderGeneDropdown(input.value, false);
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        closeGeneDropdown();
+        input.blur();
+      } else if (e.key === 'Enter') {
+        const exact = findGeneCaseInsensitive(input.value);
+        if (exact) {
+          selectGeneExpression(exact);
+          closeGeneDropdown();
+          input.blur();
+        }
+      }
+    });
+  }
+
+  if (arrow) {
+    arrow.addEventListener('click', e => {
+      e.preventDefault();
+      if (arrow.disabled) return;
+      const dd = document.getElementById('geneDropdown');
+      if (dd && !dd.hidden) closeGeneDropdown();
+      else renderGeneDropdown('', true);
+    });
+  }
+
+  document.addEventListener('mousedown', e => {
+    const picker = document.getElementById('genePicker');
+    if (picker && !picker.contains(e.target)) closeGeneDropdown();
+  });
+
   updateGeneOverlayControls();
 }
 
@@ -3780,6 +3797,7 @@ function updateGeneOverlayControls() {
   const cellBtn = document.getElementById('geneModeCellType');
   const geneBtn = document.getElementById('geneModeExpression');
   const search = document.getElementById('geneSearch');
+  const arrow = document.getElementById('genePickerArrow');
   const hasData = !!(GE.polygons && GE.expression);
 
   if (cellBtn) cellBtn.classList.toggle('active', GE.mode === 'cell-type');
@@ -3788,6 +3806,8 @@ function updateGeneOverlayControls() {
     geneBtn.disabled = !hasData;
   }
   if (search) search.disabled = !(hasData && GE.mode === 'gene');
+  if (arrow) arrow.disabled = !(hasData && GE.mode === 'gene');
+  if (!(hasData && GE.mode === 'gene')) closeGeneDropdown();
 
   updateGeneOverlayVisibility();
 }
@@ -3889,9 +3909,9 @@ async function loadGeneExpressionForSlide(slide) {
   GE.mode = 'cell-type';
   removeGeneOverlayFromOSD();
 
-  const list = document.getElementById('geneOptions');
   const input = document.getElementById('geneSearch');
-  if (list) list.innerHTML = '';
+  GE.geneNames = [];
+  closeGeneDropdown();
   if (input) input.value = '';
 
   const cfg = slide?.gene_expression;
@@ -3918,16 +3938,8 @@ async function loadGeneExpressionForSlide(slide) {
     GE.polygons = polygons;
     GE.expression = expression;
 
-    const geneNames = Object.keys(expression.genes || {});
-    if (list) {
-      const frag = document.createDocumentFragment();
-      geneNames.forEach(g => {
-        const opt = document.createElement('option');
-        opt.value = g;
-        frag.appendChild(opt);
-      });
-      list.replaceChildren(frag);
-    }
+    const geneNames = Object.keys(expression.genes || {}).sort((a,b) => a.localeCompare(b));
+    GE.geneNames = geneNames;
 
     GE.selectedGene = geneNames.includes('A2M') ? 'A2M' : (geneNames[0] || '');
     if (input) input.value = GE.selectedGene;
@@ -3964,6 +3976,55 @@ function setGeneOverlayMode(mode) {
     if (!GE.overlayCanvas && S.osdCosMx) installGeneOverlayIntoOSD();
     requestGeneOverlayRedraw();
   }
+}
+
+function findGeneCaseInsensitive(value) {
+  const q = String(value || '').trim().toLowerCase();
+  if (!q) return null;
+  return (GE.geneNames || []).find(g => g.toLowerCase() === q) || null;
+}
+
+function closeGeneDropdown() {
+  const dd = document.getElementById('geneDropdown');
+  if (dd) dd.hidden = true;
+}
+
+function renderGeneDropdown(query='', showAll=false) {
+  const dd = document.getElementById('geneDropdown');
+  if (!dd || !GE.geneNames?.length) return;
+
+  const q = String(query || '').trim().toLowerCase();
+  let matches = GE.geneNames;
+
+  if (!showAll || q) {
+    matches = GE.geneNames.filter(g => g.toLowerCase().includes(q));
+  }
+
+  matches = matches.slice(0, 80);
+  dd.innerHTML = '';
+
+  if (!matches.length) {
+    const row = document.createElement('div');
+    row.className = 'gene-option empty';
+    row.textContent = 'No matching gene';
+    dd.appendChild(row);
+  } else {
+    const frag = document.createDocumentFragment();
+    matches.forEach(g => {
+      const row = document.createElement('div');
+      row.className = 'gene-option' + (g === GE.selectedGene ? ' active' : '');
+      row.textContent = g;
+      row.addEventListener('mousedown', e => {
+        e.preventDefault();
+        selectGeneExpression(g);
+        closeGeneDropdown();
+      });
+      frag.appendChild(row);
+    });
+    dd.appendChild(frag);
+  }
+
+  dd.hidden = false;
 }
 
 function selectGeneExpression(gene) {
