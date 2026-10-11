@@ -130,7 +130,11 @@ const GE = {
   mid: 0,
   high: 1,
   raf: 0,
-  loadToken: 0
+  loadToken: 0,
+  overlayCanvas: null,
+  pathsByType: null,
+  overlayRasterW: 2048,
+  overlayRasterH: 0
 };
 
 
@@ -1204,6 +1208,8 @@ async function ensureRightCosMxDzi() {
 function createRightViewer(tileSource) {
   if (!tileSource) return;
   if (S.osdCosMx) {
+    GE.overlayCanvas = null;
+    GE.pathsByType = null;
     S.osdCosMx.destroy();
     S.osdCosMx = null;
   }
@@ -1219,13 +1225,10 @@ function createRightViewer(tileSource) {
   // CosMx viewport가 실제로 열린 뒤에 transform 적용 + setupSync 등록
   S.osdCosMx.addOnceHandler('open', () => {
     applyCosMxTransform();
+    installGeneOverlayIntoOSD();
     setupSync();
-    requestGeneOverlayRedraw();
-    console.log('[createRightViewer] open complete → transform applied → setupSync registered');
+    console.log('[createRightViewer] open complete → transform applied → OSD gene overlay installed → setupSync registered');
   });
-  S.osdCosMx.addHandler('viewport-change', requestGeneOverlayRedraw);
-  S.osdCosMx.addHandler('animation-finish', requestGeneOverlayRedraw);
-  S.osdCosMx.addHandler('resize', requestGeneOverlayRedraw);
 }
 
 async function toggleRightBase() {
@@ -3763,10 +3766,7 @@ function thDrawOverlay() {
 // ===========================================================================
 
 function initGeneExpressionControls() {
-  const canvas = document.getElementById('geneExpressionOverlay');
-  if (canvas) canvas.style.display = 'none';
   updateGeneOverlayControls();
-  window.addEventListener('resize', requestGeneOverlayRedraw);
 }
 
 function setGeneStatus(msg, isError=false) {
@@ -3793,15 +3793,91 @@ function updateGeneOverlayControls() {
 }
 
 function updateGeneOverlayVisibility() {
-  const canvas = document.getElementById('geneExpressionOverlay');
+  const canvas = GE.overlayCanvas;
   if (!canvas) return;
+
   const show = GE.mode === 'gene' &&
                !!GE.polygons &&
                !!GE.expression &&
                S.rightBase === 'cosmx' &&
                !!S.cosmxVisible;
-  canvas.style.display = show ? 'block' : 'none';
+
+  canvas.style.visibility = show ? 'visible' : 'hidden';
   if (show) requestGeneOverlayRedraw();
+}
+
+function removeGeneOverlayFromOSD() {
+  if (GE.overlayCanvas && S.osdCosMx) {
+    try { S.osdCosMx.removeOverlay(GE.overlayCanvas); } catch (_) {}
+  }
+  GE.overlayCanvas = null;
+  GE.pathsByType = null;
+  GE.overlayRasterH = 0;
+}
+
+function installGeneOverlayIntoOSD() {
+  if (!S.osdCosMx || !GE.polygons || !GE.expression) return;
+
+  const heW = Number(S.heOriginalW || 0);
+  const heH = Number(S.heOriginalH || 0);
+  if (!(heW > 0 && heH > 0)) {
+    setGeneStatus('H&E DZI metadata is required for gene-overlay alignment.', true);
+    return;
+  }
+
+  removeGeneOverlayFromOSD();
+
+  const canvas = document.createElement('canvas');
+  canvas.id = 'geneExpressionOverlay';
+  canvas.setAttribute('aria-hidden', 'true');
+  canvas.style.pointerEvents = 'none';
+  canvas.style.visibility = 'hidden';
+
+  const rasterW = GE.overlayRasterW;
+  const rasterH = Math.max(1, Math.round(rasterW * heH / heW));
+  GE.overlayRasterH = rasterH;
+  canvas.width = rasterW;
+  canvas.height = rasterH;
+
+  // This overlay is attached to the same OSD world coordinate frame used by
+  // the registered CosMx image. OSD, not page-level JS, now owns pan/zoom motion.
+  S.osdCosMx.addOverlay({
+    element: canvas,
+    location: new OpenSeadragon.Rect(0, 0, 1, heH / heW),
+    checkResize: false
+  });
+
+  GE.overlayCanvas = canvas;
+  buildGeneOverlayPaths();
+  updateGeneOverlayVisibility();
+}
+
+function buildGeneOverlayPaths() {
+  if (!GE.overlayCanvas || !GE.polygons) return;
+
+  const heW = Number(S.heOriginalW || 0);
+  const heH = Number(S.heOriginalH || 0);
+  if (!(heW > 0 && heH > 0)) return;
+
+  const sx = GE.overlayCanvas.width / heW;
+  const sy = GE.overlayCanvas.height / heH;
+  const typeCount = (GE.polygons.types || []).length;
+  const paths = Array.from({ length:typeCount }, () => new Path2D());
+
+  for (const cell of (GE.polygons.cells || [])) {
+    const typeIdx = cell[1];
+    const pts = cell[2];
+    const path = paths[typeIdx];
+    if (!path || !pts || pts.length < 6) continue;
+
+    path.moveTo(pts[0] * sx, pts[1] * sy);
+    for (let i = 2; i < pts.length; i += 2) {
+      path.lineTo(pts[i] * sx, pts[i + 1] * sy);
+    }
+    path.closePath();
+  }
+
+  GE.pathsByType = paths;
 }
 
 async function loadGeneExpressionForSlide(slide) {
@@ -3811,6 +3887,7 @@ async function loadGeneExpressionForSlide(slide) {
   GE.expression = null;
   GE.selectedGene = '';
   GE.mode = 'cell-type';
+  removeGeneOverlayFromOSD();
 
   const list = document.getElementById('geneOptions');
   const input = document.getElementById('geneSearch');
@@ -3856,9 +3933,15 @@ async function loadGeneExpressionForSlide(slide) {
     if (input) input.value = GE.selectedGene;
 
     if (GE.selectedGene) updateGeneScale(GE.selectedGene);
+
     setGeneStatus(
       `${(polygons.cells || []).length.toLocaleString()} cells · ${geneNames.length.toLocaleString()} genes`
     );
+
+    // If the right viewer is already open, attach immediately.
+    if (S.osdCosMx && S.osdCosMx.world?.getItemAt(0)) {
+      installGeneOverlayIntoOSD();
+    }
   } catch (e) {
     console.error('[Gene Expression] load failed:', e);
     setGeneStatus('Gene-expression data failed to load: ' + e.message, true);
@@ -3878,6 +3961,7 @@ function setGeneOverlayMode(mode) {
     setGeneStatus(
       `${(GE.polygons?.cells || []).length.toLocaleString()} cells · ${Object.keys(GE.expression?.genes || {}).length.toLocaleString()} genes`
     );
+    if (!GE.overlayCanvas && S.osdCosMx) installGeneOverlayIntoOSD();
     requestGeneOverlayRedraw();
   }
 }
@@ -3888,9 +3972,11 @@ function selectGeneExpression(gene) {
     if (gene) setGeneStatus('Gene not found: ' + gene, true);
     return;
   }
+
   GE.selectedGene = gene;
   const input = document.getElementById('geneSearch');
   if (input && input.value !== gene) input.value = gene;
+
   updateGeneScale(gene);
   setGeneStatus('Showing relative expression for ' + gene + '.');
   requestGeneOverlayRedraw();
@@ -3912,7 +3998,9 @@ function updateGeneScale(gene) {
     .sort((a,b) => a-b);
 
   if (!vals.length) {
-    GE.low = 0; GE.mid = 0; GE.high = 1;
+    GE.low = 0;
+    GE.mid = 0;
+    GE.high = 1;
   } else {
     GE.low  = percentileSorted(vals, 0.02);
     GE.mid  = percentileSorted(vals, 0.50);
@@ -3926,6 +4014,7 @@ function updateGeneScale(gene) {
     if (a >= 10) return v.toFixed(1);
     return v.toFixed(2);
   };
+
   const l = document.getElementById('geneLowLabel');
   const m = document.getElementById('geneMidLabel');
   const h = document.getElementById('geneHighLabel');
@@ -3937,16 +4026,20 @@ function updateGeneScale(gene) {
 function mixRGB(a, b, t) {
   t = Math.max(0, Math.min(1, t));
   return [
-    Math.round(a[0] + (b[0]-a[0])*t),
-    Math.round(a[1] + (b[1]-a[1])*t),
-    Math.round(a[2] + (b[2]-a[2])*t)
+    Math.round(a[0] + (b[0] - a[0]) * t),
+    Math.round(a[1] + (b[1] - a[1]) * t),
+    Math.round(a[2] + (b[2] - a[2]) * t)
   ];
 }
 
 function geneValueColor(v) {
-  const BLUE = [33,102,172], WHITE = [247,247,247], RED = [178,24,43];
+  const BLUE = [33,102,172];
+  const WHITE = [247,247,247];
+  const RED = [178,24,43];
+
+  if (!Number.isFinite(v)) return 'rgba(120,120,120,0.12)';
+
   let c;
-  if (!Number.isFinite(v)) return 'rgba(120,120,120,0.20)';
   if (v <= GE.mid) {
     const den = Math.max(1e-12, GE.mid - GE.low);
     c = mixRGB(BLUE, WHITE, (v - GE.low) / den);
@@ -3954,7 +4047,10 @@ function geneValueColor(v) {
     const den = Math.max(1e-12, GE.high - GE.mid);
     c = mixRGB(WHITE, RED, (v - GE.mid) / den);
   }
-  return `rgba(${c[0]},${c[1]},${c[2]},0.68)`;
+
+  // No bright polygon outline: this makes the overlay read as part of the tissue
+  // rather than as a separate floating layer.
+  return `rgba(${c[0]},${c[1]},${c[2]},0.58)`;
 }
 
 function requestGeneOverlayRedraw() {
@@ -3966,78 +4062,28 @@ function requestGeneOverlayRedraw() {
 }
 
 function drawGeneExpressionOverlay() {
-  const canvas = document.getElementById('geneExpressionOverlay');
-  if (!canvas || canvas.style.display === 'none') return;
-  if (GE.mode !== 'gene' || !GE.polygons || !GE.expression || !GE.selectedGene) return;
-  if (!S.osdCosMx || !S.osdCosMx.viewport) return;
+  const canvas = GE.overlayCanvas;
+  if (!canvas || canvas.style.visibility === 'hidden') return;
+  if (GE.mode !== 'gene' || !GE.expression || !GE.selectedGene) return;
 
-  const host = canvas.parentElement;
-  if (!host) return;
-  const rect = host.getBoundingClientRect();
-  if (rect.width <= 1 || rect.height <= 1) return;
-
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const targetW = Math.max(1, Math.round(rect.width * dpr));
-  const targetH = Math.max(1, Math.round(rect.height * dpr));
-  if (canvas.width !== targetW || canvas.height !== targetH) {
-    canvas.width = targetW;
-    canvas.height = targetH;
-    canvas.style.width = rect.width + 'px';
-    canvas.style.height = rect.height + 'px';
-  }
+  if (!GE.pathsByType) buildGeneOverlayPaths();
+  if (!GE.pathsByType) return;
 
   const ctx = canvas.getContext('2d');
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, rect.width, rect.height);
-
-  // Polygon coordinates supplied by Dr. Douglass are already H&E level-0 pixels.
-  // The right viewer uses the registered H&E world frame, so convert H&E pixels
-  // directly into OSD viewport coordinates rather than re-applying registration.
-  const heW = Number(S.heOriginalW || 0);
-  if (!(heW > 0)) {
-    setGeneStatus('H&E DZI metadata is required for gene-overlay alignment.', true);
-    return;
-  }
-
-  const bounds = S.osdCosMx.viewport.getBounds(true);
-  const minX = bounds.x * heW;
-  const minY = bounds.y * heW;
-  const maxX = (bounds.x + bounds.width) * heW;
-  const maxY = (bounds.y + bounds.height) * heW;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   const exprVals = GE.expression.genes[GE.selectedGene] || [];
-  const cells = GE.polygons.cells || [];
 
-  ctx.lineWidth = 0.55;
-  ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+  // All cells of one supplied cell_type share one expression value.
+  // Paths are therefore cached per cell_type and only 49 fills are needed
+  // when the selected gene changes.
+  for (let typeIdx = 0; typeIdx < GE.pathsByType.length; typeIdx++) {
+    const path = GE.pathsByType[typeIdx];
+    if (!path) continue;
 
-  let drawn = 0;
-  for (const cell of cells) {
-    const typeIdx = cell[1];
-    const pts = cell[2];
-    const b = cell[3];
-
-    if (!b || b[2] < minX || b[0] > maxX || b[3] < minY || b[1] > maxY) continue;
-    if (!pts || pts.length < 6) continue;
-
-    const v = Number(exprVals[typeIdx]);
-    ctx.fillStyle = geneValueColor(v);
-
-    ctx.beginPath();
-    for (let i = 0; i < pts.length; i += 2) {
-      const vp = new OpenSeadragon.Point(pts[i] / heW, pts[i+1] / heW);
-      const px = S.osdCosMx.viewport.pixelFromPoint(vp, true);
-      if (i === 0) ctx.moveTo(px.x, px.y);
-      else ctx.lineTo(px.x, px.y);
-    }
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    drawn++;
-  }
-
-  if (drawn === 0) {
-    setGeneStatus('No cell polygons are visible at the current view.');
+    const value = Number(exprVals[typeIdx]);
+    ctx.fillStyle = geneValueColor(value);
+    ctx.fill(path, 'nonzero');
   }
 }
 
