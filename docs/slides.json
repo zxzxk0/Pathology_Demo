@@ -41,6 +41,16 @@
         "translateX_pixels": -10,
         "translateY_pixels": 8,
         "scale": 0.9820150000000003
+      },
+      "original_sizes": {
+        "he": [
+          37482,
+          82972
+        ],
+        "cosmx": [
+          37482,
+          82972
+        ]
       }
     },
     "gene_expression": {

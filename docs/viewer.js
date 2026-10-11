@@ -135,7 +135,16 @@ const GE = {
   pathsByType: null,
   overlayRasterW: 2048,
   overlayRasterH: 0,
-  geneNames: []
+  geneNames: [],
+  dropdownIndex: -1,
+  opacity: 0.58,
+  debug: false,
+  debugFill: true,
+  debugOutline: false,
+  debugCentroids: false,
+  debugLabel: true,
+  centroids: null,
+  selectedCellIndex: -1
 };
 
 
@@ -341,7 +350,11 @@ async function apiGetCosmxInfo(slideId) {
 async function apiGetCosmxTransform(slideId) {
   const slide = S.slides.find(s => s.id === slideId);
   if (slide && slide.cosmx && slide.cosmx.transform) {
-    return slide.cosmx.transform;
+    return {
+      transform: slide.cosmx.transform,
+      original_sizes: slide.cosmx.original_sizes || null,
+      _transform_source_file: 'slides.json'
+    };
   }
   return { transform: 'identity' };
 }
@@ -1230,6 +1243,7 @@ function createRightViewer(tileSource) {
     setupSync();
     console.log('[createRightViewer] open complete → transform applied → OSD gene overlay installed → setupSync registered');
   });
+  S.osdCosMx.addHandler('canvas-click', onGeneDebugCanvasClick);
 }
 
 async function toggleRightBase() {
@@ -1470,36 +1484,21 @@ function syncCaptureLeftState() {
   }
   S._syncLast = {
     center: S.osdHE.viewport.getCenter().clone(),
-    zoom: S.osdHE.viewport.getZoom()
+    zoom:   S.osdHE.viewport.getZoom()
   };
 }
 
-function syncRightToHE(immediately=true) {
-  if (!S.osdHE?.viewport || !S.osdCosMx?.viewport) return;
-
-  const center = S.osdHE.viewport.getCenter().clone();
-  const zoom = S.osdHE.viewport.getZoom();
-
-  S.syncing = true;
-  try {
-    // Both panels use the same normalized H&E world frame.
-    S.osdCosMx.viewport.zoomTo(zoom, null, immediately);
-    S.osdCosMx.viewport.panTo(center, immediately);
-  } finally {
-    S.syncing = false;
-  }
-
-  syncCaptureLeftState();
-}
-
 function setupSync() {
-  // One-way absolute sync: H&E -> right panel.
+  // One-way delta sync only: H&E -> right panel.
+  // Important: this does NOT copy H&E absolute center/zoom to CosMx.
+  // The right panel keeps its current location, then follows only the
+  // movement/zoom changes made on the left after Sync is turned ON.
   if (S.osdHE && S._syncHE) {
     S.osdHE.removeHandler('viewport-change', S._syncHE);
     S._syncHE = null;
   }
 
-  S._syncCosMx = null;
+  S._syncCosMx = null;   // legacy right-to-left sync disabled on purpose
   S.syncing = false;
 
   if (!S.syncEnabled || !S.osdHE || !S.osdCosMx) {
@@ -1507,12 +1506,47 @@ function setupSync() {
     return;
   }
 
-  // Align immediately, then keep center/zoom identical.
-  syncRightToHE(true);
+  // Capture baseline at the moment sync becomes active.
+  // This prevents the right panel from jumping to the left panel's location.
+  syncCaptureLeftState();
 
   S._syncHE = () => {
-    if (!S.syncEnabled || S.syncing || !S.osdHE?.viewport || !S.osdCosMx?.viewport) return;
-    syncRightToHE(true);
+    if (!S.syncEnabled || S.syncing || !S.osdHE || !S.osdCosMx) return;
+    if (!S.osdHE.viewport || !S.osdCosMx.viewport) return;
+
+    const curCenter = S.osdHE.viewport.getCenter();
+    const curZoom   = S.osdHE.viewport.getZoom();
+
+    if (!S._syncLast) {
+      syncCaptureLeftState();
+      return;
+    }
+
+    const prevCenter = S._syncLast.center;
+    const prevZoom   = S._syncLast.zoom;
+    const dx = curCenter.x - prevCenter.x;
+    const dy = curCenter.y - prevCenter.y;
+    const zoomRatio = prevZoom > 0 ? curZoom / prevZoom : 1;
+
+    // Update baseline before moving the right panel, so repeated OSD events
+    // cannot reuse the same delta.
+    S._syncLast = { center: curCenter.clone(), zoom: curZoom };
+
+    if (Math.abs(dx) < 1e-12 && Math.abs(dy) < 1e-12 && Math.abs(zoomRatio - 1) < 1e-9) return;
+
+    S.syncing = true;
+    try {
+      const rv = S.osdCosMx.viewport;
+      const rc = rv.getCenter();
+      const rz = rv.getZoom();
+      const nextCenter = new OpenSeadragon.Point(rc.x + dx, rc.y + dy);
+      const nextZoom   = rz * zoomRatio;
+
+      rv.zoomTo(nextZoom, null, true);
+      rv.panTo(nextCenter, true);
+    } finally {
+      S.syncing = false;
+    }
   };
 
   S.osdHE.addHandler('viewport-change', S._syncHE);
@@ -1529,17 +1563,21 @@ function toggleSync() {
 
   const st = document.getElementById('syncStatus');
   if (st) {
-    st.textContent = S.syncEnabled ? 'H&E and CosMx aligned' : 'Independent panels';
+    st.textContent = S.syncEnabled
+      ? 'Following H&E movement only'
+      : 'Independent panels';
   }
 
   setupSync();
 }
 
 function resyncPanels() {
-  if (S.osdHE && S.osdCosMx) syncRightToHE(true);
-
+  // New behavior: do not force CosMx to H&E coordinates.
+  // Just reset the baseline, so the next left-panel movement is followed
+  // from the right panel's current position.
+  syncCaptureLeftState();
   const st = document.getElementById('syncStatus');
-  if (st) st.textContent = S.syncEnabled ? 'Panels re-aligned' : 'Panels aligned once';
+  if (st) st.textContent = S.syncEnabled ? 'Sync baseline reset' : 'Independent panels';
 }
 
 function toggleCosMx() {
@@ -3743,46 +3781,6 @@ function thDrawOverlay() {
 // ===========================================================================
 
 function initGeneExpressionControls() {
-  const input = document.getElementById('geneSearch');
-  const arrow = document.getElementById('genePickerArrow');
-
-  if (input) {
-    input.addEventListener('focus', () => {
-      if (!input.disabled) renderGeneDropdown(input.value, true);
-    });
-    input.addEventListener('input', () => {
-      if (!input.disabled) renderGeneDropdown(input.value, false);
-    });
-    input.addEventListener('keydown', e => {
-      if (e.key === 'Escape') {
-        closeGeneDropdown();
-        input.blur();
-      } else if (e.key === 'Enter') {
-        const exact = findGeneCaseInsensitive(input.value);
-        if (exact) {
-          selectGeneExpression(exact);
-          closeGeneDropdown();
-          input.blur();
-        }
-      }
-    });
-  }
-
-  if (arrow) {
-    arrow.addEventListener('click', e => {
-      e.preventDefault();
-      if (arrow.disabled) return;
-      const dd = document.getElementById('geneDropdown');
-      if (dd && !dd.hidden) closeGeneDropdown();
-      else renderGeneDropdown('', true);
-    });
-  }
-
-  document.addEventListener('mousedown', e => {
-    const picker = document.getElementById('genePicker');
-    if (picker && !picker.contains(e.target)) closeGeneDropdown();
-  });
-
   updateGeneOverlayControls();
 }
 
@@ -3799,15 +3797,16 @@ function updateGeneOverlayControls() {
   const search = document.getElementById('geneSearch');
   const arrow = document.getElementById('genePickerArrow');
   const hasData = !!(GE.polygons && GE.expression);
+  const geneEnabled = hasData && GE.mode === 'gene';
 
   if (cellBtn) cellBtn.classList.toggle('active', GE.mode === 'cell-type');
   if (geneBtn) {
     geneBtn.classList.toggle('active', GE.mode === 'gene');
     geneBtn.disabled = !hasData;
   }
-  if (search) search.disabled = !(hasData && GE.mode === 'gene');
-  if (arrow) arrow.disabled = !(hasData && GE.mode === 'gene');
-  if (!(hasData && GE.mode === 'gene')) closeGeneDropdown();
+  if (search) search.disabled = !geneEnabled;
+  if (arrow) arrow.disabled = !geneEnabled;
+  if (!geneEnabled) closeGeneDropdown();
 
   updateGeneOverlayVisibility();
 }
@@ -3833,6 +3832,8 @@ function removeGeneOverlayFromOSD() {
   GE.overlayCanvas = null;
   GE.pathsByType = null;
   GE.overlayRasterH = 0;
+  GE.centroids = null;
+  GE.selectedCellIndex = -1;
 }
 
 function installGeneOverlayIntoOSD() {
@@ -3898,6 +3899,14 @@ function buildGeneOverlayPaths() {
   }
 
   GE.pathsByType = paths;
+  GE.centroids = (GE.polygons.cells || []).map(cell => {
+    const b = cell[3];
+    if (b && b.length >= 4) return [(Number(b[0])+Number(b[2]))/2, (Number(b[1])+Number(b[3]))/2];
+    const pts = cell[2] || [];
+    let sxp=0, syp=0, n=0;
+    for (let i=0; i+1<pts.length; i+=2) { sxp += Number(pts[i]); syp += Number(pts[i+1]); n++; }
+    return n ? [sxp/n, syp/n] : [0,0];
+  });
 }
 
 async function loadGeneExpressionForSlide(slide) {
@@ -3911,6 +3920,7 @@ async function loadGeneExpressionForSlide(slide) {
 
   const input = document.getElementById('geneSearch');
   GE.geneNames = [];
+  GE.dropdownIndex = -1;
   closeGeneDropdown();
   if (input) input.value = '';
 
@@ -3978,59 +3988,120 @@ function setGeneOverlayMode(mode) {
   }
 }
 
-function findGeneCaseInsensitive(value) {
-  const q = String(value || '').trim().toLowerCase();
-  if (!q) return null;
-  return (GE.geneNames || []).find(g => g.toLowerCase() === q) || null;
+function _geneMatches(query) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return GE.geneNames.slice(0, 60);
+  const starts = [];
+  const contains = [];
+  for (const g of GE.geneNames) {
+    const s = g.toLowerCase();
+    if (s.startsWith(q)) starts.push(g);
+    else if (s.includes(q)) contains.push(g);
+    if (starts.length + contains.length >= 60) break;
+  }
+  return starts.concat(contains).slice(0, 60);
+}
+
+function renderGeneDropdown(query='') {
+  const dd = document.getElementById('geneDropdown');
+  if (!dd) return;
+  const matches = _geneMatches(query);
+  GE.dropdownIndex = -1;
+  dd.innerHTML = '';
+  if (!matches.length) {
+    const empty = document.createElement('div');
+    empty.className = 'gene-empty';
+    empty.textContent = 'No matching genes';
+    dd.appendChild(empty);
+    return;
+  }
+  for (const gene of matches) {
+    const row = document.createElement('div');
+    row.className = 'gene-option';
+    row.textContent = gene;
+    row.dataset.gene = gene;
+    row.addEventListener('mousedown', e => {
+      e.preventDefault();
+      chooseGeneOption(gene);
+    });
+    dd.appendChild(row);
+  }
+}
+
+function openGeneDropdown() {
+  const input = document.getElementById('geneSearch');
+  const dd = document.getElementById('geneDropdown');
+  if (!input || input.disabled || !dd) return;
+  renderGeneDropdown(input.value === GE.selectedGene ? '' : input.value);
+  dd.classList.add('open');
 }
 
 function closeGeneDropdown() {
-  const dd = document.getElementById('geneDropdown');
-  if (dd) dd.hidden = true;
+  document.getElementById('geneDropdown')?.classList.remove('open');
+  GE.dropdownIndex = -1;
 }
 
-function renderGeneDropdown(query='', showAll=false) {
+function toggleGeneDropdown(e) {
+  e?.stopPropagation();
   const dd = document.getElementById('geneDropdown');
-  if (!dd || !GE.geneNames?.length) return;
-
-  const q = String(query || '').trim().toLowerCase();
-  let matches = GE.geneNames;
-
-  if (!showAll || q) {
-    matches = GE.geneNames.filter(g => g.toLowerCase().includes(q));
-  }
-
-  matches = matches.slice(0, 80);
-  dd.innerHTML = '';
-
-  if (!matches.length) {
-    const row = document.createElement('div');
-    row.className = 'gene-option empty';
-    row.textContent = 'No matching gene';
-    dd.appendChild(row);
-  } else {
-    const frag = document.createDocumentFragment();
-    matches.forEach(g => {
-      const row = document.createElement('div');
-      row.className = 'gene-option' + (g === GE.selectedGene ? ' active' : '');
-      row.textContent = g;
-      row.addEventListener('mousedown', e => {
-        e.preventDefault();
-        selectGeneExpression(g);
-        closeGeneDropdown();
-      });
-      frag.appendChild(row);
-    });
-    dd.appendChild(frag);
-  }
-
-  dd.hidden = false;
+  if (!dd) return;
+  if (dd.classList.contains('open')) closeGeneDropdown();
+  else openGeneDropdown();
 }
+
+function filterGeneDropdown(value) {
+  const dd = document.getElementById('geneDropdown');
+  if (!dd) return;
+  renderGeneDropdown(value);
+  dd.classList.add('open');
+}
+
+function chooseGeneOption(gene) {
+  const input = document.getElementById('geneSearch');
+  if (input) input.value = gene;
+  closeGeneDropdown();
+  selectGeneExpression(gene);
+}
+
+function handleGeneSearchKey(e) {
+  const dd = document.getElementById('geneDropdown');
+  if (!dd) return;
+  if (e.key === 'Escape') {
+    closeGeneDropdown();
+    const input = document.getElementById('geneSearch');
+    if (input) input.value = GE.selectedGene || '';
+    return;
+  }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const active = dd.querySelector('.gene-option.active');
+    const gene = active?.dataset?.gene || e.target.value.trim();
+    if (GE.expression?.genes?.[gene]) chooseGeneOption(gene);
+    return;
+  }
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  e.preventDefault();
+  if (!dd.classList.contains('open')) openGeneDropdown();
+  const rows = Array.from(dd.querySelectorAll('.gene-option'));
+  if (!rows.length) return;
+  GE.dropdownIndex += e.key === 'ArrowDown' ? 1 : -1;
+  if (GE.dropdownIndex < 0) GE.dropdownIndex = rows.length - 1;
+  if (GE.dropdownIndex >= rows.length) GE.dropdownIndex = 0;
+  rows.forEach((r,i) => r.classList.toggle('active', i === GE.dropdownIndex));
+  rows[GE.dropdownIndex].scrollIntoView({block:'nearest'});
+}
+
+document.addEventListener('mousedown', e => {
+  const picker = document.getElementById('genePicker');
+  if (picker && !picker.contains(e.target)) closeGeneDropdown();
+});
 
 function selectGeneExpression(gene) {
   gene = String(gene || '').trim();
   if (!gene || !GE.expression?.genes?.[gene]) {
     if (gene) setGeneStatus('Gene not found: ' + gene, true);
+    const input = document.getElementById('geneSearch');
+    if (input) input.value = GE.selectedGene || '';
     return;
   }
 
@@ -4111,7 +4182,7 @@ function geneValueColor(v) {
 
   // No bright polygon outline: this makes the overlay read as part of the tissue
   // rather than as a separate floating layer.
-  return `rgba(${c[0]},${c[1]},${c[2]},0.58)`;
+  return `rgba(${c[0]},${c[1]},${c[2]},${Math.max(0, Math.min(1, GE.opacity))})`;
 }
 
 function requestGeneOverlayRedraw() {
@@ -4126,25 +4197,165 @@ function drawGeneExpressionOverlay() {
   const canvas = GE.overlayCanvas;
   if (!canvas || canvas.style.visibility === 'hidden') return;
   if (GE.mode !== 'gene' || !GE.expression || !GE.selectedGene) return;
-
   if (!GE.pathsByType) buildGeneOverlayPaths();
   if (!GE.pathsByType) return;
 
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
   const exprVals = GE.expression.genes[GE.selectedGene] || [];
+  const fillEnabled = !GE.debug || GE.debugFill;
 
-  // All cells of one supplied cell_type share one expression value.
-  // Paths are therefore cached per cell_type and only 49 fills are needed
-  // when the selected gene changes.
   for (let typeIdx = 0; typeIdx < GE.pathsByType.length; typeIdx++) {
     const path = GE.pathsByType[typeIdx];
     if (!path) continue;
-
     const value = Number(exprVals[typeIdx]);
-    ctx.fillStyle = geneValueColor(value);
-    ctx.fill(path, 'nonzero');
+
+    if (fillEnabled) {
+      ctx.fillStyle = geneValueColor(value);
+      ctx.fill(path, 'nonzero');
+    }
+    if (GE.debug && GE.debugOutline) {
+      ctx.strokeStyle = 'rgba(255,255,0,0.78)';
+      ctx.lineWidth = 0.75;
+      ctx.stroke(path);
+    }
   }
+
+  if (GE.debug && GE.debugCentroids && GE.centroids) {
+    const heW = Number(S.heOriginalW || 0), heH = Number(S.heOriginalH || 0);
+    if (heW > 0 && heH > 0) {
+      const sx = canvas.width / heW, sy = canvas.height / heH;
+      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      for (const c of GE.centroids) {
+        const x = c[0]*sx, y = c[1]*sy;
+        ctx.fillRect(x-1, y-1, 2, 2);
+      }
+    }
+  }
+  drawSelectedGeneDebugCell(ctx);
+}
+
+function toggleGeneDebug() {
+  GE.debug = !GE.debug;
+  const btn = document.getElementById('geneDebugToggle');
+  const box = document.getElementById('geneDebugControls');
+  if (btn) {
+    btn.textContent = GE.debug ? 'ON' : 'OFF';
+    btn.classList.toggle('active', GE.debug);
+  }
+  if (box) box.style.display = GE.debug ? 'block' : 'none';
+  if (!GE.debug) GE.selectedCellIndex = -1;
+  requestGeneOverlayRedraw();
+}
+
+function setGeneOverlayOpacity(value) {
+  GE.opacity = Math.max(0, Math.min(1, Number(value)/100));
+  const label = document.getElementById('geneOpacityVal');
+  if (label) label.textContent = Math.round(GE.opacity*100) + '%';
+  requestGeneOverlayRedraw();
+}
+
+function setGeneDebugOption(name, checked) {
+  if (name === 'fill') GE.debugFill = !!checked;
+  else if (name === 'outline') GE.debugOutline = !!checked;
+  else if (name === 'centroids') GE.debugCentroids = !!checked;
+  else if (name === 'label') GE.debugLabel = !!checked;
+  requestGeneOverlayRedraw();
+}
+
+function _viewerClickToHePx(event) {
+  if (!S.osdCosMx || !event?.position) return null;
+  const heW = Number(S.heOriginalW || 0);
+  if (!(heW > 0)) return null;
+  const vp = S.osdCosMx.viewport.pointFromPixel(event.position, true);
+  return {x: vp.x*heW, y: vp.y*heW};
+}
+
+function onGeneDebugCanvasClick(event) {
+  if (!GE.debug || GE.mode !== 'gene' || !GE.polygons || !GE.centroids) return;
+  if (S.rightBase !== 'cosmx') return;
+
+  const p = _viewerClickToHePx(event);
+  if (!p) return;
+
+  let bestIdx = -1, bestD2 = Infinity;
+  for (let i=0; i<GE.centroids.length; i++) {
+    const c = GE.centroids[i];
+    const dx = c[0]-p.x, dy = c[1]-p.y, d2 = dx*dx + dy*dy;
+    if (d2 < bestD2) { bestD2 = d2; bestIdx = i; }
+  }
+
+  GE.selectedCellIndex = bestIdx;
+  updateGeneDebugInfo(p, bestIdx, Math.sqrt(bestD2));
+  requestGeneOverlayRedraw();
+}
+
+function updateGeneDebugInfo(clickPx, cellIndex, distancePx) {
+  const el = document.getElementById('geneDebugInfo');
+  if (!el || cellIndex < 0) return;
+
+  const cell = GE.polygons.cells[cellIndex];
+  const centroid = GE.centroids[cellIndex];
+  const typeIdx = cell[1];
+  const typeName = GE.polygons.types?.[typeIdx] ?? ('type ' + typeIdx);
+  const value = Number(GE.expression?.genes?.[GE.selectedGene]?.[typeIdx]);
+
+  el.innerHTML =
+    '<strong>Cell:</strong> ' + escapeGeneDebugHtml(cell[0]) + '<br>' +
+    '<strong>Type:</strong> ' + escapeGeneDebugHtml(typeName) + '<br>' +
+    '<strong>Gene:</strong> ' + escapeGeneDebugHtml(GE.selectedGene) +
+      ' = ' + (Number.isFinite(value) ? value.toFixed(4) : 'N/A') + '<br>' +
+    '<strong>Centroid H&E px:</strong> ' + centroid[0].toFixed(1) + ', ' + centroid[1].toFixed(1) + '<br>' +
+    '<strong>Clicked H&E px:</strong> ' + clickPx.x.toFixed(1) + ', ' + clickPx.y.toFixed(1) + '<br>' +
+    '<strong>Nearest distance:</strong> ' + distancePx.toFixed(1) + ' px';
+}
+
+function escapeGeneDebugHtml(v) {
+  return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function drawSelectedGeneDebugCell(ctx) {
+  if (!GE.debug || GE.selectedCellIndex < 0 || !GE.polygons || !GE.overlayCanvas) return;
+  const cell = GE.polygons.cells[GE.selectedCellIndex];
+  if (!cell) return;
+
+  const pts = cell[2] || [];
+  if (pts.length < 6) return;
+
+  const heW = Number(S.heOriginalW || 0), heH = Number(S.heOriginalH || 0);
+  if (!(heW > 0 && heH > 0)) return;
+  const sx = GE.overlayCanvas.width/heW, sy = GE.overlayCanvas.height/heH;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(pts[0]*sx, pts[1]*sy);
+  for (let i=2; i<pts.length; i+=2) ctx.lineTo(pts[i]*sx, pts[i+1]*sy);
+  ctx.closePath();
+  ctx.strokeStyle = 'rgba(255,255,0,1)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  const c = GE.centroids?.[GE.selectedCellIndex];
+  if (c) {
+    const x = c[0]*sx, y = c[1]*sy;
+    ctx.strokeStyle = 'rgba(255,0,255,1)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x-6,y); ctx.lineTo(x+6,y);
+    ctx.moveTo(x,y-6); ctx.lineTo(x,y+6);
+    ctx.stroke();
+
+    if (GE.debugLabel) {
+      const label = String(cell[0]);
+      ctx.font = '12px sans-serif';
+      const w = ctx.measureText(label).width + 8;
+      ctx.fillStyle = 'rgba(15,15,26,0.9)';
+      ctx.fillRect(x+7, y-17, w, 18);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(label, x+11, y-4);
+    }
+  }
+  ctx.restore();
 }
 

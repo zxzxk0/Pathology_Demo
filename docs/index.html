@@ -411,32 +411,33 @@ body {
 }
 .gene-mode-btn.active { background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:700; }
 #geneSearch {
-  width:100%; padding:0.42rem 1.8rem 0.42rem 0.48rem; font-size:0.72rem;
-  background:var(--surface); border:1px solid var(--border); color:var(--text);
-  border-radius:5px; outline:none;
+  width:100%; padding:0.38rem 0.45rem; font-size:0.72rem; background:var(--surface);
+  border:1px solid var(--border); color:var(--text); border-radius:5px; outline:none;
 }
-#geneSearch:focus { border-color:var(--accent); }
 #geneSearch:disabled { opacity:0.45; cursor:not-allowed; }
+
 .gene-picker { position:relative; width:100%; }
+.gene-picker #geneSearch { padding-right:1.8rem; }
 .gene-picker-arrow {
-  position:absolute; right:1px; top:1px; bottom:1px; width:1.65rem;
-  border:none; border-left:1px solid var(--border); border-radius:0 4px 4px 0;
-  background:var(--surface); color:var(--muted); cursor:pointer;
+  position:absolute; right:2px; top:2px; bottom:2px; width:1.65rem;
+  border:0; border-left:1px solid var(--border); background:transparent;
+  color:var(--muted); cursor:pointer; border-radius:0 4px 4px 0;
 }
-.gene-picker-arrow:hover:not(:disabled) { color:var(--accent); }
-.gene-picker-arrow:disabled { opacity:0.4; cursor:not-allowed; }
+.gene-picker-arrow:hover:not(:disabled) { color:var(--accent); background:rgba(0,212,255,0.06); }
+.gene-picker-arrow:disabled { opacity:0.35; cursor:not-allowed; }
 .gene-dropdown {
-  position:absolute; z-index:200; left:0; right:0; top:calc(100% + 3px);
-  max-height:210px; overflow-y:auto; padding:0.2rem;
-  background:#111a32; border:1px solid var(--accent); border-radius:6px;
-  box-shadow:0 10px 24px rgba(0,0,0,0.45);
+  display:none; position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:2000;
+  max-height:210px; overflow-y:auto; background:#111a31; border:1px solid var(--accent);
+  border-radius:6px; box-shadow:0 8px 22px rgba(0,0,0,.45); padding:3px;
 }
+.gene-dropdown.open { display:block; }
 .gene-option {
-  padding:0.38rem 0.45rem; border-radius:4px; font-size:0.72rem;
-  color:var(--text); cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  padding:0.38rem 0.48rem; border-radius:4px; font-size:0.72rem; color:var(--text);
+  cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-.gene-option:hover, .gene-option.active { background:var(--border); color:#fff; }
-.gene-option.empty { color:var(--muted); cursor:default; }
+.gene-option:hover, .gene-option.active { background:var(--accent); color:var(--bg); }
+.gene-empty { padding:0.45rem; font-size:0.68rem; color:var(--muted); }
+
 .gene-gradient {
   height:11px; margin-top:0.45rem; border-radius:999px;
   background:linear-gradient(90deg,#2166ac 0%,#f7f7f7 50%,#b2182b 100%);
@@ -453,6 +454,16 @@ body {
   image-rendering:auto;
 }
 
+
+.gene-debug-box { margin-top:0.55rem; padding-top:0.5rem; border-top:1px solid var(--border); }
+.gene-debug-title { display:flex; align-items:center; justify-content:space-between; font-size:0.64rem; color:var(--accent); font-weight:700; margin-bottom:0.4rem; }
+.gene-debug-row { display:flex; align-items:center; gap:0.4rem; margin-top:0.35rem; font-size:0.62rem; color:var(--muted); }
+.gene-debug-row label { flex:1; }
+.gene-debug-row input[type=range] { width:92px; }
+.gene-debug-checks { display:grid; grid-template-columns:1fr 1fr; gap:0.3rem 0.45rem; margin-top:0.45rem; }
+.gene-debug-checks label { display:flex; align-items:center; gap:0.3rem; font-size:0.61rem; color:var(--muted); }
+.gene-debug-info { margin-top:0.45rem; padding:0.4rem; background:rgba(0,0,0,0.18); border:1px solid var(--border); border-radius:5px; font-size:0.60rem; line-height:1.4; color:var(--muted); word-break:break-word; }
+.gene-debug-info strong { color:var(--text); font-weight:600; }
 </style>
 </head>
 <body>
@@ -499,9 +510,13 @@ body {
           </div>
           <div style="font-size:0.64rem;color:var(--muted);margin-bottom:0.22rem;">Gene</div>
           <div class="gene-picker" id="genePicker">
-            <input id="geneSearch" type="text" placeholder="Search gene..." autocomplete="off" disabled>
-            <button type="button" id="genePickerArrow" class="gene-picker-arrow" aria-label="Open gene list" disabled>▾</button>
-            <div id="geneDropdown" class="gene-dropdown" hidden></div>
+            <input id="geneSearch" type="text" placeholder="Search gene..." autocomplete="off" disabled
+                   onfocus="openGeneDropdown()"
+                   oninput="filterGeneDropdown(this.value)"
+                   onkeydown="handleGeneSearchKey(event)">
+            <button class="gene-picker-arrow" type="button" id="genePickerArrow" disabled
+                    onclick="toggleGeneDropdown(event)" aria-label="Open gene list">▾</button>
+            <div class="gene-dropdown" id="geneDropdown"></div>
           </div>
           <div class="gene-gradient"></div>
           <div class="gene-scale-labels">
@@ -510,6 +525,25 @@ body {
             <span id="geneHighLabel">High</span>
           </div>
           <div id="geneStatus">Available for slides with gene-expression data.</div>
+          <div class="gene-debug-box">
+            <div class="gene-debug-title">
+              <span>Alignment Debug</span>
+              <button class="gene-mode-btn" id="geneDebugToggle" style="flex:0 0 auto;padding:0.25rem 0.45rem;" onclick="toggleGeneDebug()">OFF</button>
+            </div>
+            <div id="geneDebugControls" style="display:none;">
+              <div class="gene-debug-row">
+                <label for="geneOpacity">Overlay opacity <span id="geneOpacityVal">58%</span></label>
+                <input id="geneOpacity" type="range" min="0" max="100" value="58" oninput="setGeneOverlayOpacity(this.value)">
+              </div>
+              <div class="gene-debug-checks">
+                <label><input id="geneDbgFill" type="checkbox" checked onchange="setGeneDebugOption('fill',this.checked)"> Fill</label>
+                <label><input id="geneDbgOutline" type="checkbox" onchange="setGeneDebugOption('outline',this.checked)"> Outline</label>
+                <label><input id="geneDbgCentroid" type="checkbox" onchange="setGeneDebugOption('centroids',this.checked)"> Centroids</label>
+                <label><input id="geneDbgIds" type="checkbox" checked onchange="setGeneDebugOption('label',this.checked)"> Selected ID</label>
+              </div>
+              <div class="gene-debug-info" id="geneDebugInfo">Click a cell in the right viewer to inspect its nearest polygon.</div>
+            </div>
+          </div>
         </div>
       </div>
 

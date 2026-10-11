@@ -31,3 +31,11 @@ Integrated overlay revision:
 - OpenSeadragon now moves/scales the overlay together with the image during pan/zoom.
 - Polygon paths are cached by cell type; changing genes only recolors 49 cached paths.
 - Bright cell outlines were removed to reduce the 'floating transparent sheet' appearance.
+
+Alignment debug revision:
+- Toggle Alignment Debug ON.
+- Adjust overlay opacity.
+- Toggle Fill, Outline, Centroids, and Selected ID.
+- Click the right viewer to inspect the nearest polygon.
+- Sidebar reports cell ID, cell type, expression, centroid H&E px,
+  clicked H&E px, and nearest-centroid distance.
