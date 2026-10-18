@@ -50,3 +50,14 @@ Douglass feedback revision:
   data rows, which is exactly one less than Excel's 1,048,576-row worksheet
   limit when the header is counted; the missing ~200k polygons cannot be
   reconstructed safely from this file.
+
+AI annotation review workflow revision:
+- Added explicit Import AI GeoJSON button in Annotation Tools.
+- Imported AI polygons are selectable/editable in Annotorious.
+- Click a polygon and drag vertex handles to correct its geometry.
+- Added Apply Class to Selected using the Tumor/Stroma/Other/Lymphocyte buttons.
+- Added revision counters for loaded / edited / deleted / manually added polygons.
+- Export Corrected GeoJSON exports the current viewer state, including geometry edits,
+  class corrections, deletions, and newly drawn polygons.
+- Corrected export filename: <slide_id>_corrected_annotations.geojson.
+- Imported feature properties are preserved where possible, with pathogene_review metadata.

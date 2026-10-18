@@ -1390,10 +1390,17 @@ async function loadSlide(slide) {
     S.anno = OpenSeadragon.Annotorious(S.osdHE, {
       allowEmpty: true,
       drawOnSingleClick: false,
-      disableEditor: true,
+      disableEditor: false,
       formatter: annoFormatter
     });
-    S.anno.on('deleteAnnotation', () => updateAnnoCount(-1));
+    S.anno.on('deleteAnnotation', () => {
+      updateAnnoCount(-1);
+      refreshAIRevisionStats();
+    });
+    S.anno.on('updateAnnotation', () => {
+      refreshAnnotationCountAndSave();
+      refreshAIRevisionStats();
+    });
     // Restore saved annotations
     const saved = localStorage.getItem('anno_' + slide.id);
     if (saved) {
@@ -1413,7 +1420,7 @@ async function loadSlide(slide) {
       const labeled = {
         ...anno,
         body: [{ type: 'TextualBody', purpose: 'tagging', value: cls }],
-        properties: { ...(anno.properties || {}), label: cls }
+        properties: { ...(anno.properties || {}), label: cls, source: 'pathogene_manual' }
       };
 
       // Re-add once with a stable tagging body. Avoid repeated setAnnotations(),
@@ -2614,6 +2621,98 @@ function _magicWandAnnotationFromPolygon(polyOriginal, cls, meta = {}) {
   };
 }
 
+
+function applyClassToSelectedAnnotation() {
+  if (!S.anno) return;
+
+  const selected = S.anno.getSelected ? S.anno.getSelected() : null;
+  if (!selected) {
+    alert('Click an annotation to select it first.');
+    return;
+  }
+
+  const cls = normalizeAnnoClassName(S.drawLabel || 'tumor');
+  const updated = {
+    ...selected,
+    body: [{ type: 'TextualBody', purpose: 'tagging', value: cls }],
+    properties: {
+      ...(selected.properties || {}),
+      label: cls,
+      classification: {
+        ...(selected.properties?.classification || {}),
+        name: cls
+      }
+    }
+  };
+
+  try {
+    if (typeof S.anno.updateSelected === 'function') {
+      S.anno.updateSelected(updated, true);
+    } else {
+      S.anno.removeAnnotation(selected.id);
+      S.anno.addAnnotation(updated);
+    }
+    refreshAnnotationCountAndSave();
+    refreshAIRevisionStats();
+    statusText('Updated selected annotation class to ' + cls);
+  } catch (e) {
+    console.warn('Could not update selected annotation class:', e);
+    alert('Could not update the selected annotation class: ' + e.message);
+  }
+}
+
+function refreshAIRevisionStats() {
+  const el = document.getElementById('aiRevisionStats');
+  if (!el) return;
+
+  if (!S.anno) {
+    el.textContent = 'AI GeoJSON: viewer not ready';
+    return;
+  }
+
+  const anns = S.anno.getAnnotations ? (S.anno.getAnnotations() || []) : [];
+  const originalIds = new Set(S.importedAnnoOriginalIds || []);
+  const currentById = new Map(anns.map(a => [String(a.id), a]));
+
+  const loaded = Number(S.importedAnnoBaselineCount || originalIds.size || 0);
+  if (!loaded) {
+    el.textContent = 'AI GeoJSON: not loaded';
+    return;
+  }
+
+  let edited = 0;
+  let remaining = 0;
+
+  for (const id of originalIds) {
+    const ann = currentById.get(String(id));
+    if (!ann) continue;
+    remaining++;
+
+    const currentSvg = ann?.target?.selector?.value || ann?.target?.selector?.exact || '';
+    const originalSvg = ann?.properties?.imported_original_svg || '';
+    const originalProps = ann?.properties?.imported_original_properties || {};
+    const originalLabel = normalizeAnnoClassName(
+      originalProps?.classification?.name ||
+      originalProps?.label ||
+      originalProps?.name ||
+      'other'
+    );
+    const currentLabel = _annotationLabel(ann);
+
+    if ((originalSvg && currentSvg !== originalSvg) || currentLabel !== originalLabel) edited++;
+  }
+
+  const deleted = Math.max(0, loaded - remaining);
+  const manualAdded = anns.filter(a => !originalIds.has(String(a.id)) && a?.properties?.source !== 'imported_geojson').length;
+
+  el.innerHTML =
+    '<strong style="color:var(--text)">AI revision</strong><br>' +
+    'Loaded: ' + loaded.toLocaleString() +
+    ' · Edited: ' + edited.toLocaleString() +
+    ' · Deleted: ' + deleted.toLocaleString() +
+    ' · Added: ' + manualAdded.toLocaleString();
+}
+
 async function deleteSelectedAnnotation() {
   if (!S.anno) return;
   const sel = S.anno.getSelected ? S.anno.getSelected() : null;
@@ -2663,6 +2762,7 @@ function clearImportedAnnotations() {
   S.importedAnnoIds = [];
   refreshAnnotationCountAndSave();
   statusText('Cleared ' + targets.length + ' imported GeoJSON annotations');
+  refreshAIRevisionStats();
 }
 
 function _downloadJSON(obj, filename) {
@@ -2721,13 +2821,31 @@ function _annotationToGeoJSONFeature(ann) {
   // Compare the current SVG against the as-generated snapshot so exported
   // provenance distinguishes "wand-assisted" from "wand-assisted, corrected".
   const mwOut = mw ? { ...mw, edited: mw.original_svg != null ? svg !== mw.original_svg : null } : undefined;
+  const importedOriginalProps = ann?.properties?.imported_original_properties || {};
+  const importedOriginalSvg = ann?.properties?.imported_original_svg || '';
+  const isImported = ann?.properties?.imported === true || ann?.properties?.source === 'imported_geojson';
+  const importedEdited = isImported
+    ? (importedOriginalSvg ? svg !== importedOriginalSvg : null)
+    : undefined;
+
   return {
     type: 'Feature',
     id: ann.id,
     properties: {
+      ...importedOriginalProps,
       label,
-      classification: { name: label },
+      classification: {
+        ...(importedOriginalProps?.classification || {}),
+        name: label
+      },
       source: ann?.properties?.source || 'pathogene_manual_export',
+      ...(isImported ? {
+        pathogene_review: {
+          imported_ai: true,
+          geometry_edited: importedEdited,
+          exported_after_review: true
+        }
+      } : {}),
       ...(mwOut ? { magic_wand: mwOut } : {})
     },
     geometry: { type: 'Polygon', coordinates: [coords] }
@@ -2747,8 +2865,9 @@ function saveAnnotationsGeoJSON() {
     type: 'FeatureCollection',
     name: slideId + '_annotations',
     features
-  }, slideId + '_annotations.geojson');
-  statusText('Saved ' + features.length + ' polygon annotations as GeoJSON');
+  }, slideId + '_corrected_annotations.geojson');
+  statusText('Exported ' + features.length + ' current annotations as corrected GeoJSON');
+  refreshAIRevisionStats();
 }
 
 // ── CosMx manual alignment ────────────────────────────────────────────────
@@ -3591,7 +3710,11 @@ function _geojsonToAnnotation(feat) {
     type: 'Annotation',
     body: [{ type: 'TextualBody', purpose: 'tagging', value: cls }],
     target: { selector: { type: 'SvgSelector', value: svg } },
-    properties: { label: cls }
+    properties: {
+      ...(feat.properties || {}),
+      label: cls,
+      classification: { ...(feat.properties?.classification || {}), name: cls }
+    }
   };
 }
 
@@ -3651,7 +3774,13 @@ function onImportFile(input) {
         const ann = _geojsonToAnnotation(f);
         if (!ann) return;
         try {
-          ann.properties = { ...(ann.properties || {}), imported: true, source: 'imported_geojson' };
+          ann.properties = {
+            ...(ann.properties || {}),
+            imported: true,
+            source: 'imported_geojson',
+            imported_original_svg: ann?.target?.selector?.value || '',
+            imported_original_properties: { ...(f.properties || {}) }
+          };
           S.anno.addAnnotation(ann);
           if (!S.importedAnnoIds) S.importedAnnoIds = [];
           S.importedAnnoIds.push(ann.id);
@@ -3665,8 +3794,11 @@ function onImportFile(input) {
       // Force Annotorious to re-render imported annotations with class colors.
       try { S.anno.setAnnotations(S.anno.getAnnotations()); } catch(e) {}
 
-      statusText(msg);
+      S.importedAnnoOriginalIds = Array.from(new Set(S.importedAnnoIds || []));
+      S.importedAnnoBaselineCount = S.importedAnnoOriginalIds.length;
+      statusText(msg + ' — click a polygon to edit vertices, then export the corrected GeoJSON.');
       updateAnnoCount(0);
+      refreshAIRevisionStats();
     } catch (err) {
       alert('Invalid GeoJSON: ' + err.message);
     }

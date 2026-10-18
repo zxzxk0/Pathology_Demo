@@ -604,9 +604,30 @@ body {
           </div>
         </div>
 
-        <button class="sbtn" id="btnSaveAnnotations" style="margin-top:0.4rem;width:100%;" onclick="saveAnnotationsGeoJSON()">Save Polygon GeoJSON</button>
-        <button class="sbtn" id="btnClearImported" style="margin-top:0.4rem;width:100%;" onclick="clearImportedAnnotations()">Clear Imported GeoJSON</button>
-        <button class="sbtn danger" id="btnDeleteSelected" style="margin-top:0.4rem;width:100%;" onclick="deleteSelectedAnnotation()">Delete Selected</button>
+        <input type="file" id="aiAnnoImportInput" accept=".json,.geojson" style="display:none" onchange="onImportFile(this)">
+        <button class="sbtn" id="btnImportAIAnnotations" style="margin-top:0.5rem;width:100%;font-weight:700;"
+                onclick="document.getElementById('aiAnnoImportInput').click()">Import AI GeoJSON</button>
+
+        <div id="aiEditHint" style="font-size:0.65rem;color:var(--muted);margin-top:0.35rem;line-height:1.4;">
+          After import, click a polygon to select it and drag its vertex handles to correct the shape.
+          To change its class, select Tumor/Stroma/Other/Lymphocyte above and click Apply Class.
+        </div>
+
+        <button class="sbtn" id="btnApplySelectedClass" style="margin-top:0.4rem;width:100%;"
+                onclick="applyClassToSelectedAnnotation()">Apply Class to Selected</button>
+        <button class="sbtn danger" id="btnDeleteSelected" style="margin-top:0.4rem;width:100%;"
+                onclick="deleteSelectedAnnotation()">Delete Selected</button>
+
+        <div id="aiRevisionStats"
+             style="margin-top:0.5rem;padding:0.45rem;background:var(--card);border:1px solid var(--border);
+                    border-radius:5px;font-size:0.65rem;color:var(--muted);line-height:1.4;">
+          AI GeoJSON: not loaded
+        </div>
+
+        <button class="sbtn" id="btnSaveAnnotations" style="margin-top:0.45rem;width:100%;font-weight:700;"
+                onclick="saveAnnotationsGeoJSON()">Export Corrected GeoJSON</button>
+        <button class="sbtn" id="btnClearImported" style="margin-top:0.4rem;width:100%;"
+                onclick="clearImportedAnnotations()">Clear Imported AI</button>
       </div>
       <!-- END ADDED -->
 
@@ -629,11 +650,6 @@ body {
       <!-- ADDED: Confidence Threshold section -->
       <div class="cg">
         <h4>AI Lymphocyte Threshold</h4>
-        <input type="file" id="importInput" accept=".json,.geojson" style="display:none" onchange="onImportFile(this)">
-        <button class="sbtn" style="width:100%;margin-bottom:0.4rem;"
-                onclick="document.getElementById('importInput').click()">
-          Import Annotations
-        </button>
         <input type="file" id="thImportInput" accept=".json,.geojson" style="display:none">
         <button class="sbtn" style="width:100%;margin-bottom:0.4rem;"
                 onclick="document.getElementById('thImportInput').click()">
