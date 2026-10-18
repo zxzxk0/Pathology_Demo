@@ -39,3 +39,14 @@ Alignment debug revision:
 - Click the right viewer to inspect the nearest polygon.
 - Sidebar reports cell ID, cell type, expression, centroid H&E px,
   clicked H&E px, and nearest-centroid distance.
+
+Douglass feedback revision:
+- Gene Expression mode now hides the colored CosMx base image and uses a white
+  right-viewer background so only the blue-white-red expression layer is shown.
+- The gene picker no longer truncates at ~60 results. All 6,175 loaded genes
+  are available in the scroll list, and the search box filters the full catalog.
+- The current supplied cell_polygons.csv contains 37,330 unique cell IDs, and
+  the demo displays all 37,330 available polygons. The source CSV has 1,048,575
+  data rows, which is exactly one less than Excel's 1,048,576-row worksheet
+  limit when the header is counted; the missing ~200k polygons cannot be
+  reconstructed safely from this file.

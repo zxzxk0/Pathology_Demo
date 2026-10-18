@@ -427,7 +427,7 @@ body {
 .gene-picker-arrow:disabled { opacity:0.35; cursor:not-allowed; }
 .gene-dropdown {
   display:none; position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:2000;
-  max-height:210px; overflow-y:auto; background:#111a31; border:1px solid var(--accent);
+  max-height:300px; overflow-y:auto; background:#111a31; border:1px solid var(--accent);
   border-radius:6px; box-shadow:0 8px 22px rgba(0,0,0,.45); padding:3px;
 }
 .gene-dropdown.open { display:block; }
@@ -464,6 +464,13 @@ body {
 .gene-debug-checks label { display:flex; align-items:center; gap:0.3rem; font-size:0.61rem; color:var(--muted); }
 .gene-debug-info { margin-top:0.45rem; padding:0.4rem; background:rgba(0,0,0,0.18); border:1px solid var(--border); border-radius:5px; font-size:0.60rem; line-height:1.4; color:var(--muted); word-break:break-word; }
 .gene-debug-info strong { color:var(--text); font-weight:600; }
+
+.gene-align-grid{display:grid;grid-template-columns:1fr 74px;gap:.32rem .4rem;align-items:center;margin-top:.5rem}
+.gene-align-grid label{font-size:.61rem;color:var(--muted)}
+.gene-align-grid input{width:74px;padding:.28rem .35rem;font-size:.65rem;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px}
+.gene-nudge-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.28rem;margin-top:.45rem}
+.gene-nudge-grid button,.gene-align-actions button{padding:.28rem;font-size:.63rem;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;cursor:pointer}
+.gene-align-actions{display:flex;gap:.35rem;margin-top:.45rem}.gene-align-actions button{flex:1}
 </style>
 </head>
 <body>
@@ -518,6 +525,9 @@ body {
                     onclick="toggleGeneDropdown(event)" aria-label="Open gene list">▾</button>
             <div class="gene-dropdown" id="geneDropdown"></div>
           </div>
+          <div id="geneCatalogInfo" style="font-size:0.58rem;color:var(--muted);margin-top:0.25rem;">
+            Gene list will appear after the data load.
+          </div>
           <div class="gene-gradient"></div>
           <div class="gene-scale-labels">
             <span id="geneLowLabel">Low</span>
@@ -541,7 +551,18 @@ body {
                 <label><input id="geneDbgCentroid" type="checkbox" onchange="setGeneDebugOption('centroids',this.checked)"> Centroids</label>
                 <label><input id="geneDbgIds" type="checkbox" checked onchange="setGeneDebugOption('label',this.checked)"> Selected ID</label>
               </div>
-              <div class="gene-debug-info" id="geneDebugInfo">Click a cell in the right viewer to inspect its nearest polygon.</div>
+              <div style="margin-top:.55rem;padding-top:.5rem;border-top:1px solid var(--border)">
+<div style="font-size:.63rem;color:var(--accent);font-weight:700">Manual Overlay Alignment</div>
+<div class="gene-align-grid">
+<label>X offset (H&amp;E px)</label><input id="geneOffsetX" type="number" step="1" value="0" onchange="setGeneOverlayOffset('x',this.value)">
+<label>Y offset (H&amp;E px)</label><input id="geneOffsetY" type="number" step="1" value="0" onchange="setGeneOverlayOffset('y',this.value)">
+</div>
+<div style="font-size:.58rem;color:var(--muted);margin-top:.35rem">Positive X = right, positive Y = down</div>
+<div class="gene-nudge-grid"><span></span><button onclick="nudgeGeneOverlay(0,-10)">↑ 10</button><span></span>
+<button onclick="nudgeGeneOverlay(-10,0)">← 10</button><button onclick="nudgeGeneOverlay(0,0,true)">0</button><button onclick="nudgeGeneOverlay(10,0)">10 →</button>
+<span></span><button onclick="nudgeGeneOverlay(0,10)">↓ 10</button><span></span></div>
+<div class="gene-align-actions"><button onclick="saveGeneOverlayAlignment()">Save XY</button><button onclick="resetGeneOverlayAlignment()">Reset</button></div>
+</div><div class="gene-debug-info" id="geneDebugInfo">Click a cell in the right viewer to inspect its nearest polygon.</div>
             </div>
           </div>
         </div>

@@ -144,7 +144,9 @@ const GE = {
   debugCentroids: false,
   debugLabel: true,
   centroids: null,
-  selectedCellIndex: -1
+  selectedCellIndex: -1,
+  offsetX: 0,
+  offsetY: 0
 };
 
 
@@ -1240,6 +1242,7 @@ function createRightViewer(tileSource) {
   S.osdCosMx.addOnceHandler('open', () => {
     applyCosMxTransform();
     installGeneOverlayIntoOSD();
+    applyGeneExpressionBaseLayerMode();
     setupSync();
     console.log('[createRightViewer] open complete → transform applied → OSD gene overlay installed → setupSync registered');
   });
@@ -3811,7 +3814,32 @@ function updateGeneOverlayControls() {
   updateGeneOverlayVisibility();
 }
 
+function applyGeneExpressionBaseLayerMode() {
+  const geneOnly =
+    GE.mode === 'gene' &&
+    S.rightBase === 'cosmx' &&
+    !!S.cosmxVisible;
+
+  const viewerEl = document.getElementById('viewerRight');
+  const osdContainer = viewerEl?.querySelector('.openseadragon-container');
+  const item = S.osdCosMx?.world?.getItemAt(0);
+
+  // Gene Expression mode should display only the expression heat map.
+  // The underlying CosMx cell-type colors are therefore hidden and the
+  // viewer background is made white. Cell Type mode restores the image.
+  if (item) {
+    try { item.setOpacity(geneOnly ? 0 : 1); } catch (e) {
+      console.warn('[Gene Expression] unable to change CosMx base opacity:', e);
+    }
+  }
+
+  if (viewerEl) viewerEl.style.background = geneOnly ? '#ffffff' : '';
+  if (osdContainer) osdContainer.style.background = geneOnly ? '#ffffff' : '';
+}
+
 function updateGeneOverlayVisibility() {
+  applyGeneExpressionBaseLayerMode();
+
   const canvas = GE.overlayCanvas;
   if (!canvas) return;
 
@@ -3891,9 +3919,9 @@ function buildGeneOverlayPaths() {
     const path = paths[typeIdx];
     if (!path || !pts || pts.length < 6) continue;
 
-    path.moveTo(pts[0] * sx, pts[1] * sy);
+    path.moveTo((pts[0] + GE.offsetX) * sx, (pts[1] + GE.offsetY) * sy);
     for (let i = 2; i < pts.length; i += 2) {
-      path.lineTo(pts[i] * sx, pts[i + 1] * sy);
+      path.lineTo((pts[i] + GE.offsetX) * sx, (pts[i + 1] + GE.offsetY) * sy);
     }
     path.closePath();
   }
@@ -3923,6 +3951,8 @@ async function loadGeneExpressionForSlide(slide) {
   GE.dropdownIndex = -1;
   closeGeneDropdown();
   if (input) input.value = '';
+  const geneCatalogInfo = document.getElementById('geneCatalogInfo');
+  if (geneCatalogInfo) geneCatalogInfo.textContent = 'Gene list will appear after the data load.';
 
   const cfg = slide?.gene_expression;
   if (!cfg?.polygons_url || !cfg?.expression_url) {
@@ -3947,9 +3977,16 @@ async function loadGeneExpressionForSlide(slide) {
 
     GE.polygons = polygons;
     GE.expression = expression;
+    loadSavedGeneOverlayAlignment(slide.id);
 
     const geneNames = Object.keys(expression.genes || {}).sort((a,b) => a.localeCompare(b));
     GE.geneNames = geneNames;
+
+    const geneCatalogInfo = document.getElementById('geneCatalogInfo');
+    if (geneCatalogInfo) {
+      geneCatalogInfo.textContent =
+        `${geneNames.length.toLocaleString()} genes available — scroll the full list or type to filter.`;
+    }
 
     GE.selectedGene = geneNames.includes('A2M') ? 'A2M' : (geneNames[0] || '');
     if (input) input.value = GE.selectedGene;
@@ -3957,7 +3994,8 @@ async function loadGeneExpressionForSlide(slide) {
     if (GE.selectedGene) updateGeneScale(GE.selectedGene);
 
     setGeneStatus(
-      `${(polygons.cells || []).length.toLocaleString()} cells · ${geneNames.length.toLocaleString()} genes`
+      `${(polygons.cells || []).length.toLocaleString()} unique cell polygons loaded from the provided file · ` +
+      `${geneNames.length.toLocaleString()} genes`
     );
 
     // If the right viewer is already open, attach immediately.
@@ -3981,7 +4019,8 @@ function setGeneOverlayMode(mode) {
     setGeneStatus('Cell Type view: original CosMx visualization.');
   } else {
     setGeneStatus(
-      `${(GE.polygons?.cells || []).length.toLocaleString()} cells · ${Object.keys(GE.expression?.genes || {}).length.toLocaleString()} genes`
+      `${(GE.polygons?.cells || []).length.toLocaleString()} unique cell polygons loaded · ` +
+      `${Object.keys(GE.expression?.genes || {}).length.toLocaleString()} genes`
     );
     if (!GE.overlayCanvas && S.osdCosMx) installGeneOverlayIntoOSD();
     requestGeneOverlayRedraw();
@@ -3990,16 +4029,19 @@ function setGeneOverlayMode(mode) {
 
 function _geneMatches(query) {
   const q = String(query || '').trim().toLowerCase();
-  if (!q) return GE.geneNames.slice(0, 60);
+
+  // Eugene requested access to the entire catalog. When the search box is
+  // empty, expose all loaded genes instead of truncating the list.
+  if (!q) return GE.geneNames.slice();
+
   const starts = [];
   const contains = [];
   for (const g of GE.geneNames) {
     const s = g.toLowerCase();
     if (s.startsWith(q)) starts.push(g);
     else if (s.includes(q)) contains.push(g);
-    if (starts.length + contains.length >= 60) break;
   }
-  return starts.concat(contains).slice(0, 60);
+  return starts.concat(contains);
 }
 
 function renderGeneDropdown(query='') {
@@ -4227,7 +4269,7 @@ function drawGeneExpressionOverlay() {
       const sx = canvas.width / heW, sy = canvas.height / heH;
       ctx.fillStyle = 'rgba(0,0,0,0.75)';
       for (const c of GE.centroids) {
-        const x = c[0]*sx, y = c[1]*sy;
+        const x = (c[0]+GE.offsetX)*sx, y = (c[1]+GE.offsetY)*sy;
         ctx.fillRect(x-1, y-1, 2, 2);
       }
     }
@@ -4281,7 +4323,7 @@ function onGeneDebugCanvasClick(event) {
   let bestIdx = -1, bestD2 = Infinity;
   for (let i=0; i<GE.centroids.length; i++) {
     const c = GE.centroids[i];
-    const dx = c[0]-p.x, dy = c[1]-p.y, d2 = dx*dx + dy*dy;
+    const dx = (c[0]+GE.offsetX)-p.x, dy = (c[1]+GE.offsetY)-p.y, d2 = dx*dx + dy*dy;
     if (d2 < bestD2) { bestD2 = d2; bestIdx = i; }
   }
 
@@ -4315,6 +4357,39 @@ function escapeGeneDebugHtml(v) {
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+
+function _geneOverlayStorageKey(slideId){return 'gene_overlay_xy_'+String(slideId||GE.slideId||'unknown');}
+function syncGeneOverlayOffsetInputs(){
+  const x=document.getElementById('geneOffsetX'), y=document.getElementById('geneOffsetY');
+  if(x)x.value=Number(GE.offsetX||0).toFixed(0); if(y)y.value=Number(GE.offsetY||0).toFixed(0);
+}
+function invalidateGeneOverlayGeometry(){GE.pathsByType=null;requestGeneOverlayRedraw();}
+function setGeneOverlayOffset(axis,value){
+  const v=Number(value); if(!Number.isFinite(v))return;
+  if(axis==='x')GE.offsetX=v; else if(axis==='y')GE.offsetY=v; else return;
+  syncGeneOverlayOffsetInputs(); invalidateGeneOverlayGeometry();
+}
+function nudgeGeneOverlay(dx,dy,reset=false){
+  if(reset){GE.offsetX=0;GE.offsetY=0;} else {GE.offsetX=Number(GE.offsetX||0)+Number(dx||0);GE.offsetY=Number(GE.offsetY||0)+Number(dy||0);}
+  syncGeneOverlayOffsetInputs();invalidateGeneOverlayGeometry();
+}
+function saveGeneOverlayAlignment(){
+  if(!GE.slideId)return;
+  const p={offset_x_px:Number(GE.offsetX||0),offset_y_px:Number(GE.offsetY||0)};
+  localStorage.setItem(_geneOverlayStorageKey(GE.slideId),JSON.stringify(p));
+  setGeneStatus(`Saved overlay alignment: X ${p.offset_x_px}px, Y ${p.offset_y_px}px`);
+}
+function loadSavedGeneOverlayAlignment(slideId){
+  GE.offsetX=0;GE.offsetY=0;
+  try{const raw=localStorage.getItem(_geneOverlayStorageKey(slideId));if(raw){const p=JSON.parse(raw);if(Number.isFinite(Number(p.offset_x_px)))GE.offsetX=Number(p.offset_x_px);if(Number.isFinite(Number(p.offset_y_px)))GE.offsetY=Number(p.offset_y_px);}}catch(e){}
+  syncGeneOverlayOffsetInputs();
+}
+function resetGeneOverlayAlignment(){
+  GE.offsetX=0;GE.offsetY=0;
+  try{if(GE.slideId)localStorage.removeItem(_geneOverlayStorageKey(GE.slideId));}catch(e){}
+  syncGeneOverlayOffsetInputs();invalidateGeneOverlayGeometry();setGeneStatus('Gene overlay X/Y alignment reset.');
+}
+
 function drawSelectedGeneDebugCell(ctx) {
   if (!GE.debug || GE.selectedCellIndex < 0 || !GE.polygons || !GE.overlayCanvas) return;
   const cell = GE.polygons.cells[GE.selectedCellIndex];
@@ -4329,8 +4404,8 @@ function drawSelectedGeneDebugCell(ctx) {
 
   ctx.save();
   ctx.beginPath();
-  ctx.moveTo(pts[0]*sx, pts[1]*sy);
-  for (let i=2; i<pts.length; i+=2) ctx.lineTo(pts[i]*sx, pts[i+1]*sy);
+  ctx.moveTo((pts[0]+GE.offsetX)*sx, (pts[1]+GE.offsetY)*sy);
+  for (let i=2; i<pts.length; i+=2) ctx.lineTo((pts[i]+GE.offsetX)*sx, (pts[i+1]+GE.offsetY)*sy);
   ctx.closePath();
   ctx.strokeStyle = 'rgba(255,255,0,1)';
   ctx.lineWidth = 2;
@@ -4338,7 +4413,7 @@ function drawSelectedGeneDebugCell(ctx) {
 
   const c = GE.centroids?.[GE.selectedCellIndex];
   if (c) {
-    const x = c[0]*sx, y = c[1]*sy;
+    const x = (c[0]+GE.offsetX)*sx, y = (c[1]+GE.offsetY)*sy;
     ctx.strokeStyle = 'rgba(255,0,255,1)';
     ctx.lineWidth = 1.5;
     ctx.beginPath();

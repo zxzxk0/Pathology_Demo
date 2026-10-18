@@ -14,7 +14,7 @@ cd E:\Pathology_Demo
 
 git add -A
 
-git commit -m "fix: polygon drawing and annotation fixes"
+git commit -m "Gene_expression"
 
 git pull --rebase
 
