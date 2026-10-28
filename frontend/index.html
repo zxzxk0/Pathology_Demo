@@ -398,6 +398,79 @@ body {
   vector-effect:non-scaling-stroke;
 }
 
+
+/* ══ GENE EXPRESSION OVERLAY ═════════════════════════════════════════════ */
+.gene-card {
+  background:var(--card); border:1px solid var(--border); border-radius:8px;
+  padding:0.55rem;
+}
+.gene-mode-row { display:flex; gap:0.35rem; margin-bottom:0.5rem; }
+.gene-mode-btn {
+  flex:1; padding:0.38rem 0.3rem; font-size:0.70rem; background:var(--surface);
+  border:1px solid var(--border); color:var(--muted); border-radius:5px; cursor:pointer;
+}
+.gene-mode-btn.active { background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:700; }
+#geneSearch {
+  width:100%; padding:0.38rem 0.45rem; font-size:0.72rem; background:var(--surface);
+  border:1px solid var(--border); color:var(--text); border-radius:5px; outline:none;
+}
+#geneSearch:disabled { opacity:0.45; cursor:not-allowed; }
+
+.gene-picker { position:relative; width:100%; }
+.gene-picker #geneSearch { padding-right:1.8rem; }
+.gene-picker-arrow {
+  position:absolute; right:2px; top:2px; bottom:2px; width:1.65rem;
+  border:0; border-left:1px solid var(--border); background:transparent;
+  color:var(--muted); cursor:pointer; border-radius:0 4px 4px 0;
+}
+.gene-picker-arrow:hover:not(:disabled) { color:var(--accent); background:rgba(0,212,255,0.06); }
+.gene-picker-arrow:disabled { opacity:0.35; cursor:not-allowed; }
+.gene-dropdown {
+  display:none; position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:2000;
+  max-height:300px; overflow-y:auto; background:#111a31; border:1px solid var(--accent);
+  border-radius:6px; box-shadow:0 8px 22px rgba(0,0,0,.45); padding:3px;
+}
+.gene-dropdown.open { display:block; }
+.gene-option {
+  padding:0.38rem 0.48rem; border-radius:4px; font-size:0.72rem; color:var(--text);
+  cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.gene-option:hover, .gene-option.active { background:var(--accent); color:var(--bg); }
+.gene-empty { padding:0.45rem; font-size:0.68rem; color:var(--muted); }
+
+.gene-gradient {
+  height:11px; margin-top:0.45rem; border-radius:999px;
+  background:linear-gradient(90deg,#2166ac 0%,#f7f7f7 50%,#b2182b 100%);
+  border:1px solid rgba(255,255,255,0.14);
+}
+.gene-scale-labels {
+  display:flex; justify-content:space-between; gap:0.25rem; margin-top:0.18rem;
+  font-size:0.59rem; color:var(--muted); font-variant-numeric:tabular-nums;
+}
+#geneStatus { margin-top:0.4rem; font-size:0.62rem; color:var(--muted); line-height:1.35; }
+#geneExpressionOverlay {
+  pointer-events:none !important;
+  display:block;
+  image-rendering:auto;
+}
+
+
+.gene-debug-box { margin-top:0.55rem; padding-top:0.5rem; border-top:1px solid var(--border); }
+.gene-debug-title { display:flex; align-items:center; justify-content:space-between; font-size:0.64rem; color:var(--accent); font-weight:700; margin-bottom:0.4rem; }
+.gene-debug-row { display:flex; align-items:center; gap:0.4rem; margin-top:0.35rem; font-size:0.62rem; color:var(--muted); }
+.gene-debug-row label { flex:1; }
+.gene-debug-row input[type=range] { width:92px; }
+.gene-debug-checks { display:grid; grid-template-columns:1fr 1fr; gap:0.3rem 0.45rem; margin-top:0.45rem; }
+.gene-debug-checks label { display:flex; align-items:center; gap:0.3rem; font-size:0.61rem; color:var(--muted); }
+.gene-debug-info { margin-top:0.45rem; padding:0.4rem; background:rgba(0,0,0,0.18); border:1px solid var(--border); border-radius:5px; font-size:0.60rem; line-height:1.4; color:var(--muted); word-break:break-word; }
+.gene-debug-info strong { color:var(--text); font-weight:600; }
+
+.gene-align-grid{display:grid;grid-template-columns:1fr 74px;gap:.32rem .4rem;align-items:center;margin-top:.5rem}
+.gene-align-grid label{font-size:.61rem;color:var(--muted)}
+.gene-align-grid input{width:74px;padding:.28rem .35rem;font-size:.65rem;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px}
+.gene-nudge-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.28rem;margin-top:.45rem}
+.gene-nudge-grid button,.gene-align-actions button{padding:.28rem;font-size:.63rem;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;cursor:pointer}
+.gene-align-actions{display:flex;gap:.35rem;margin-top:.45rem}.gene-align-actions button{flex:1}
 </style>
 </head>
 <body>
@@ -414,7 +487,7 @@ body {
       <button class="hbtn" onclick="resyncPanels()">Re-sync</button>
       <button class="hbtn on" id="btnRightBase" onclick="toggleRightBase()" title="Switch the right comparison window between registered CosMx and original H&amp;E">Right: CosMx</button>
       <!-- ADDED: logo.png — 타일 서버를 통해 서빙 (exe 빌드 시에도 동작) -->
-      <img src="/logo.png" alt="Cell type legend" style="height:44px;width:auto;object-fit:contain;flex-shrink:0;margin-left:0.3rem;">
+      <img src="./logo.png" alt="Cell type legend" style="height:44px;width:auto;object-fit:contain;flex-shrink:0;margin-left:0.3rem;">
     </div>
   </div>
   <div class="v-body">
@@ -433,6 +506,67 @@ body {
         <div class="legend-row"><div class="cbox" style="background:rgba(46,204,113,.5);border:2px solid #2ecc71"></div>Stroma</div>
         <div class="legend-row"><div class="cbox" style="background:rgba(155,89,182,.5);border:2px solid #9b59b6"></div>Other / In-situ</div>
         <div class="legend-row"><div class="cbox" style="background:rgba(0,255,255,.3);border:2px solid #0ff"></div>Lymphocyte</div>
+      </div>
+
+      <div class="cg" id="geneExpressionPanel">
+        <h4>CosMx Cell Overlay</h4>
+        <div class="gene-card">
+          <div class="gene-mode-row">
+            <button class="gene-mode-btn active" id="geneModeCellType" onclick="setGeneOverlayMode('cell-type')">Cell Type</button>
+            <button class="gene-mode-btn" id="geneModeExpression" onclick="setGeneOverlayMode('gene')">Gene Expression</button>
+          </div>
+          <div style="font-size:0.64rem;color:var(--muted);margin-bottom:0.22rem;">Gene</div>
+          <div class="gene-picker" id="genePicker">
+            <input id="geneSearch" type="text" placeholder="Search gene..." autocomplete="off" disabled
+                   onfocus="openGeneDropdown()"
+                   oninput="filterGeneDropdown(this.value)"
+                   onkeydown="handleGeneSearchKey(event)">
+            <button class="gene-picker-arrow" type="button" id="genePickerArrow" disabled
+                    onclick="toggleGeneDropdown(event)" aria-label="Open gene list">▾</button>
+            <div class="gene-dropdown" id="geneDropdown"></div>
+          </div>
+          <div id="geneRenderInfo" style="font-size:0.58rem;color:var(--muted);margin-top:0.25rem;">High-resolution viewport rendering enabled.</div>
+          <div id="geneCatalogInfo" style="font-size:0.58rem;color:var(--muted);margin-top:0.25rem;">
+            Gene list will appear after the data load.
+          </div>
+          <div class="gene-gradient"></div>
+          <div class="gene-scale-labels">
+            <span id="geneLowLabel">Low</span>
+            <span id="geneMidLabel">Mid</span>
+            <span id="geneHighLabel">High</span>
+          </div>
+          <div id="geneStatus">Available for slides with gene-expression data.</div>
+          <div class="gene-debug-box">
+            <div class="gene-debug-title">
+              <span>Alignment Debug</span>
+              <button class="gene-mode-btn" id="geneDebugToggle" style="flex:0 0 auto;padding:0.25rem 0.45rem;" onclick="toggleGeneDebug()">OFF</button>
+            </div>
+            <div id="geneDebugControls" style="display:none;">
+              <div class="gene-debug-row">
+                <label for="geneOpacity">Overlay opacity <span id="geneOpacityVal">58%</span></label>
+                <input id="geneOpacity" type="range" min="0" max="100" value="58" oninput="setGeneOverlayOpacity(this.value)">
+              </div>
+              <div class="gene-debug-checks">
+                <label><input id="geneDbgFill" type="checkbox" checked onchange="setGeneDebugOption('fill',this.checked)"> Fill</label>
+                <label><input id="geneDbgOutline" type="checkbox" onchange="setGeneDebugOption('outline',this.checked)"> Outline</label>
+                <label><input id="geneDbgCentroid" type="checkbox" onchange="setGeneDebugOption('centroids',this.checked)"> Centroids</label>
+                <label><input id="geneDbgIds" type="checkbox" checked onchange="setGeneDebugOption('label',this.checked)"> Selected ID</label>
+              </div>
+              <div style="margin-top:.55rem;padding-top:.5rem;border-top:1px solid var(--border)">
+<div style="font-size:.63rem;color:var(--accent);font-weight:700">Manual Overlay Alignment</div>
+<div class="gene-align-grid">
+<label>X offset (H&amp;E px)</label><input id="geneOffsetX" type="number" step="1" value="0" onchange="setGeneOverlayOffset('x',this.value)">
+<label>Y offset (H&amp;E px)</label><input id="geneOffsetY" type="number" step="1" value="0" onchange="setGeneOverlayOffset('y',this.value)">
+</div>
+<div style="font-size:.58rem;color:var(--muted);margin-top:.35rem">Positive X = right, positive Y = down</div>
+<div class="gene-nudge-grid"><span></span><button onclick="nudgeGeneOverlay(0,-10)">↑ 10</button><span></span>
+<button onclick="nudgeGeneOverlay(-10,0)">← 10</button><button onclick="nudgeGeneOverlay(0,0,true)">0</button><button onclick="nudgeGeneOverlay(10,0)">10 →</button>
+<span></span><button onclick="nudgeGeneOverlay(0,10)">↓ 10</button><span></span></div>
+<div class="gene-align-actions"><button onclick="saveGeneOverlayAlignment()">Save XY</button><button onclick="resetGeneOverlayAlignment()">Reset</button></div>
+</div><div class="gene-debug-info" id="geneDebugInfo">Click a cell in the right viewer to inspect its nearest polygon.</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- ADDED: Draw Annotation (polygon) -->
@@ -456,6 +590,8 @@ body {
         <div class="crow" style="margin-top:0.4rem;">
           <button class="sbtn" id="btnMagicWand" onclick="toggleMagicWand()">Magic Wand</button>
           <button class="sbtn" id="btnApplyMagicWand" onclick="applyMagicWandSelection()" disabled>Apply Wand</button>
+        </div>
+        <div class="crow">
           <button class="sbtn" id="btnCancelMagicWand" onclick="cancelMagicWandSelection()" disabled>Cancel Wand</button>
           <button class="sbtn" id="btnUndoMagicWand" onclick="undoLastMagicWand()" disabled>Undo Wand</button>
         </div>
@@ -469,9 +605,30 @@ body {
           </div>
         </div>
 
-        <button class="sbtn" id="btnSaveAnnotations" style="margin-top:0.4rem;width:100%;" onclick="saveAnnotationsGeoJSON()">Save Polygon GeoJSON</button>
-        <button class="sbtn" id="btnClearImported" style="margin-top:0.4rem;width:100%;" onclick="clearImportedAnnotations()">Clear Imported GeoJSON</button>
-        <button class="sbtn danger" id="btnDeleteSelected" style="margin-top:0.4rem;width:100%;" onclick="deleteSelectedAnnotation()">Delete Selected</button>
+        <input type="file" id="aiAnnoImportInput" accept=".json,.geojson" style="display:none" onchange="onImportFile(this)">
+        <button class="sbtn" id="btnImportAIAnnotations" style="margin-top:0.5rem;width:100%;font-weight:700;"
+                onclick="document.getElementById('aiAnnoImportInput').click()">Import AI GeoJSON</button>
+
+        <div id="aiEditHint" style="font-size:0.65rem;color:var(--muted);margin-top:0.35rem;line-height:1.4;">
+          After import, click a polygon to select it and drag its vertex handles to correct the shape.
+          To change its class, select Tumor/Stroma/Other/Lymphocyte above and click Apply Class.
+        </div>
+
+        <button class="sbtn" id="btnApplySelectedClass" style="margin-top:0.4rem;width:100%;"
+                onclick="applyClassToSelectedAnnotation()">Apply Class to Selected</button>
+        <button class="sbtn danger" id="btnDeleteSelected" style="margin-top:0.4rem;width:100%;"
+                onclick="deleteSelectedAnnotation()">Delete Selected</button>
+
+        <div id="aiRevisionStats"
+             style="margin-top:0.5rem;padding:0.45rem;background:var(--card);border:1px solid var(--border);
+                    border-radius:5px;font-size:0.65rem;color:var(--muted);line-height:1.4;">
+          AI GeoJSON: not loaded
+        </div>
+
+        <button class="sbtn" id="btnSaveAnnotations" style="margin-top:0.45rem;width:100%;font-weight:700;"
+                onclick="saveAnnotationsGeoJSON()">Export Corrected GeoJSON</button>
+        <button class="sbtn" id="btnClearImported" style="margin-top:0.4rem;width:100%;"
+                onclick="clearImportedAnnotations()">Clear Imported AI</button>
       </div>
       <!-- END ADDED -->
 
@@ -494,11 +651,6 @@ body {
       <!-- ADDED: Confidence Threshold section -->
       <div class="cg">
         <h4>AI Lymphocyte Threshold</h4>
-        <input type="file" id="importInput" accept=".json,.geojson" style="display:none" onchange="onImportFile(this)">
-        <button class="sbtn" style="width:100%;margin-bottom:0.4rem;"
-                onclick="document.getElementById('importInput').click()">
-          Import Annotations
-        </button>
         <input type="file" id="thImportInput" accept=".json,.geojson" style="display:none">
         <button class="sbtn" style="width:100%;margin-bottom:0.4rem;"
                 onclick="document.getElementById('thImportInput').click()">
@@ -565,7 +717,9 @@ body {
         </div>
         <div class="vp" id="cosmxPanel">
           <div class="vp-hdr" id="rightViewerHdr">Spatial Transcriptomics (CosMx)</div>
-          <div class="vp-body"><div id="viewerRight"></div></div>
+          <div class="vp-body">
+            <div id="viewerRight"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -819,6 +973,6 @@ body {
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
-<script src="/viewer.js"></script>
+<script src="./viewer.js"></script>
 </body>
 </html>
