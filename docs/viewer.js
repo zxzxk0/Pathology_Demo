@@ -30,27 +30,98 @@ function getSlideDziUrl(slide) {
   return slide.dzi_url || slide.dzi || slide.tileSource || slide.tile_source || null;
 }
 
-async function loadHeDziMeta(slideId) {
+async function loadHeDziMeta(slide) {
   S.heDziDownsample = 1;
-  S.heOriginalW = 0;
-  S.heOriginalH = 0;
+  S.heOriginalW = null;
+  S.heOriginalH = null;
+
+  const slideId = slide?.id || '';
   if (!slideId) return;
 
+  const metaUrl = `./data/tiles/${encodeURIComponent(slideId)}/dzi_meta.json`;
+
   try {
-    const r = await fetch('./data/tiles/' + encodeURIComponent(slideId) + '/dzi_meta.json', { cache: 'no-store' });
-    if (!r.ok) {
-      console.warn('[H&E] DZI metadata not found; using 1:1 annotation coordinates.');
+    const res = await fetch(metaUrl, { cache: 'no-store' });
+    if (res.ok) {
+      const meta = await res.json();
+
+      const originalW = Number(
+        meta.original_width ??
+        meta.originalW ??
+        meta.width ??
+        meta.image_width
+      );
+      const originalH = Number(
+        meta.original_height ??
+        meta.originalH ??
+        meta.height ??
+        meta.image_height
+      );
+      const dziW = Number(
+        meta.dzi_width ??
+        meta.dziW ??
+        meta.processed_width ??
+        meta.width
+      );
+
+      if (Number.isFinite(originalW) && originalW > 0) S.heOriginalW = originalW;
+      if (Number.isFinite(originalH) && originalH > 0) S.heOriginalH = originalH;
+
+      if (Number.isFinite(originalW) && originalW > 0 &&
+          Number.isFinite(dziW) && dziW > 0) {
+        S.heDziDownsample = originalW / dziW;
+      } else {
+        S.heDziDownsample = 1;
+      }
+
+      console.log('[H&E] DZI metadata:', {
+        source: 'dzi_meta.json',
+        originalW: S.heOriginalW,
+        originalH: S.heOriginalH,
+        downsample: S.heDziDownsample
+      });
       return;
     }
 
-    const m = await r.json();
-    const ds = Number(m.dzi_downsample || 1);
-    S.heDziDownsample = Number.isFinite(ds) && ds > 0 ? ds : 1;
-    S.heOriginalW = Number(m.slide_w || 0);
-    S.heOriginalH = Number(m.slide_h || 0);
-    console.log('[H&E] DZI metadata:', m);
+    console.warn('[H&E] dzi_meta.json not found; falling back to DZI XML:', metaUrl);
   } catch (e) {
-    console.warn('[H&E] DZI metadata unavailable; using 1:1 annotation coordinates:', e);
+    console.warn('[H&E] failed to read dzi_meta.json; falling back to DZI XML:', e);
+  }
+
+  try {
+    const dziUrl = slide?.dzi_url ||
+      `./data/tiles/${encodeURIComponent(slideId)}/${encodeURIComponent(slideId)}.dzi`;
+
+    const res = await fetch(dziUrl, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const xmlText = await res.text();
+    const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+    const sizeEl = doc.querySelector('Size');
+
+    if (!sizeEl) throw new Error('DZI <Size> element missing');
+
+    const dziW = Number(sizeEl.getAttribute('Width'));
+    const dziH = Number(sizeEl.getAttribute('Height'));
+
+    if (!Number.isFinite(dziW) || !Number.isFinite(dziH) || dziW <= 0 || dziH <= 0) {
+      throw new Error('Invalid DZI Width/Height');
+    }
+
+    // Without a sidecar original-size file, use the DZI image frame directly.
+    S.heOriginalW = dziW;
+    S.heOriginalH = dziH;
+    S.heDziDownsample = 1;
+
+    console.log('[H&E] DZI metadata:', {
+      source: 'DZI XML fallback',
+      originalW: S.heOriginalW,
+      originalH: S.heOriginalH,
+      downsample: S.heDziDownsample
+    });
+  } catch (e) {
+    console.warn('[H&E] DZI metadata unavailable; using 1:1 annotation coordinates.', e);
+    S.heDziDownsample = 1;
   }
 }
 

@@ -974,5 +974,18 @@ body {
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <script src="./viewer.js"></script>
+
+<script>
+function onImgError(img) {
+  try {
+    if (!img) return;
+    img.onerror = null;
+    img.style.display = 'none';
+  } catch (e) {
+    console.warn('[UI] image fallback failed:', e);
+  }
+}
+</script>
+
 </body>
 </html>
