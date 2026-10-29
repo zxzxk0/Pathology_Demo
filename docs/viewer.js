@@ -4000,8 +4000,12 @@ function updateGeneOverlayVisibility() {
 }
 
 function removeGeneOverlayFromOSD() {
-  if (GE.overlayCanvas && S.osdCosMx) {
-    try { S.osdCosMx.removeOverlay(GE.overlayCanvas); } catch (_) {}
+  if (GE.overlayCanvas) {
+    // New high-resolution renderer appends the canvas directly to the OSD
+    // viewer container rather than registering it as an OSD overlay.
+    try { GE.overlayCanvas.remove(); } catch (_) {
+      try { S.osdCosMx?.removeOverlay(GE.overlayCanvas); } catch (_) {}
+    }
   }
   GE.overlayCanvas = null;
   GE.pathsByType = null;
@@ -4157,18 +4161,15 @@ function _geneTypeColors() {
   const finite = values.filter(v => Number.isFinite(v));
   if (!finite.length) return values.map(() => 'rgba(255,255,255,0)');
 
-  let min = Math.min(...finite);
-  let max = Math.max(...finite);
-  if (min === max) max = min + 1e-9;
-
   for (let i = 0; i < values.length; i++) {
     const v = values[i];
     if (!Number.isFinite(v)) {
       colors[i] = 'rgba(255,255,255,0)';
       continue;
     }
-    const t = (v - min) / (max - min);
-    colors[i] = geneBlueWhiteRed(t);
+    // Reuse the existing blue-white-red color mapping used by the original
+    // gene-expression renderer. updateGeneScale() sets GE.low/mid/high.
+    colors[i] = geneValueColor(v);
   }
   return colors;
 }
@@ -4186,7 +4187,7 @@ function drawGeneOverlayViewport() {
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.globalAlpha = Math.max(0, Math.min(1, GE.opacity ?? 1));
+  ctx.globalAlpha = 1; // geneValueColor() already applies GE.opacity
 
   const bounds = _geneViewportLevel0Bounds();
   if (!bounds) return;
@@ -4533,7 +4534,8 @@ function percentileSorted(sorted, p) {
 }
 
 function updateGeneScale(gene) {
-  const vals = (GE.expression?.genes?.[gene] || [])
+  GE.currentGeneValues = GE.expression?.genes?.[gene] || [];
+  const vals = (GE.currentGeneValues || [])
     .map(Number)
     .filter(Number.isFinite)
     .sort((a,b) => a-b);
