@@ -152,7 +152,8 @@ const GE = {
   loadToken: 0,
   overlayCanvas: null,
   pathsByType: null,
-  overlayRasterW: 2048, // legacy; viewport renderer below no longer uses a fixed 2048px raster
+  overlayRasterW: 4096,
+  deepZoomThreshold: 5, // legacy; viewport renderer below no longer uses a fixed 2048px raster
   polyTypeToExprType: null,
   spatialGrid: null,
   spatialGridSize: 1024,
@@ -1249,6 +1250,8 @@ function createRightViewer(tileSource) {
   if (!tileSource) return;
   if (S.osdCosMx) {
     GE.overlayCanvas = null;
+  GE.staticOverlayCanvas = null;
+  GE.staticOverlayEl = null;
     GE.pathsByType = null;
     S.osdCosMx.destroy();
     S.osdCosMx = null;
@@ -1268,13 +1271,13 @@ function createRightViewer(tileSource) {
     installGeneOverlayIntoOSD();
     applyGeneExpressionBaseLayerMode();
 
-    // Redraw the expression polygons in screen space so they remain sharp
-    // at every zoom level.
-    S.osdCosMx.addHandler('animation', requestGeneViewportRedraw);
-    S.osdCosMx.addHandler('animation-finish', requestGeneViewportRedraw);
+    // Hybrid mode:
+    // - pan/zoom uses the pre-rendered 4096px full-slide overlay
+    // - only after zooming finishes do we optionally redraw the current viewport sharply
+    S.osdCosMx.addHandler('animation-finish', maybeRefreshGeneDeepZoom);
     S.osdCosMx.addHandler('resize', () => {
       if (GE._resizeViewportCanvas) GE._resizeViewportCanvas();
-      requestGeneViewportRedraw();
+      maybeRefreshGeneDeepZoom();
     });
 
     setupSync();
@@ -4006,17 +4009,23 @@ function applyGeneExpressionBaseLayerMode() {
 function updateGeneOverlayVisibility() {
   applyGeneExpressionBaseLayerMode();
 
-  const canvas = GE.overlayCanvas;
-  if (!canvas) return;
-
   const show = GE.mode === 'gene' &&
                !!GE.polygons &&
                !!GE.expression &&
                S.rightBase === 'cosmx' &&
                !!S.cosmxVisible;
 
-  canvas.style.visibility = show ? 'visible' : 'hidden';
-  if (show) requestGeneOverlayRedraw();
+  if (GE.staticOverlayCanvas) {
+    GE.staticOverlayCanvas.style.visibility = show ? 'visible' : 'hidden';
+  }
+
+  if (GE.overlayCanvas) {
+    GE.overlayCanvas.style.visibility = 'hidden';
+  }
+
+  if (show) {
+    maybeRefreshGeneDeepZoom();
+  }
 }
 
 function removeGeneOverlayFromOSD() {
@@ -4034,6 +4043,121 @@ function removeGeneOverlayFromOSD() {
   GE.selectedCellIndex = -1;
 }
 
+
+
+function buildGeneStaticOverlay() {
+  if (!GE.polygons || !GE.expression || !S.heOriginalW || !S.heOriginalH) return null;
+
+  const rasterW = GE.overlayRasterW || 4096;
+  const rasterH = Math.max(1, Math.round(rasterW * (S.heOriginalH / S.heOriginalW)));
+
+  let canvas = GE.staticOverlayCanvas;
+  if (!canvas) {
+    canvas = document.createElement('canvas');
+    canvas.id = 'geneExpressionStaticOverlay';
+    GE.staticOverlayCanvas = canvas;
+  }
+
+  if (canvas.width !== rasterW) canvas.width = rasterW;
+  if (canvas.height !== rasterH) canvas.height = rasterH;
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, rasterW, rasterH);
+  ctx.globalAlpha = Math.max(0, Math.min(1, GE.opacity ?? 1));
+
+  const colors = _geneTypeColors();
+  const sx = rasterW / S.heOriginalW;
+  const sy = rasterH / S.heOriginalH;
+
+  for (const cell of (GE.polygons.cells || [])) {
+    const typeIdx = cell[1];
+    const exprTypeIdx = GE.polyTypeToExprType?.[typeIdx] ?? typeIdx;
+    if (exprTypeIdx < 0) continue;
+
+    const fill = colors[exprTypeIdx];
+    if (!fill || fill === 'rgba(255,255,255,0)') continue;
+
+    const coords = cell[2];
+    if (!coords || coords.length < 6) continue;
+
+    ctx.beginPath();
+    for (let k = 0; k < coords.length; k += 2) {
+      const hx = coords[k] + (GE.offsetX || 0);
+      const hy = coords[k + 1] + (GE.offsetY || 0);
+      const px = hx * sx;
+      const py = hy * sy;
+
+      if (k === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+
+    if (GE.debugFill !== false) {
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
+
+    if (GE.debugOutline) {
+      ctx.strokeStyle = 'rgba(20,20,20,0.55)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  ctx.globalAlpha = 1;
+  return canvas;
+}
+
+function installGeneStaticOverlayIntoOSD() {
+  const viewer = S.osdCosMx;
+  if (!viewer || !S.heOriginalW || !S.heOriginalH) return;
+
+  if (GE.staticOverlayEl) {
+    try { viewer.removeOverlay(GE.staticOverlayEl); } catch (e) {}
+    GE.staticOverlayEl = null;
+  }
+
+  const canvas = buildGeneStaticOverlay();
+  if (!canvas) return;
+
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
+  canvas.style.pointerEvents = 'none';
+
+  const aspect = S.heOriginalH / S.heOriginalW;
+  viewer.addOverlay({
+    element: canvas,
+    location: new OpenSeadragon.Rect(0, 0, 1, aspect)
+  });
+
+  GE.staticOverlayEl = canvas;
+}
+
+function refreshGeneStaticOverlay() {
+  if (GE.mode !== 'gene') return;
+  installGeneStaticOverlayIntoOSD();
+  updateGeneOverlayVisibility();
+}
+
+function maybeRefreshGeneDeepZoom() {
+  const viewer = S.osdCosMx;
+  if (!viewer || GE.mode !== 'gene') return;
+
+  const zoom = viewer.viewport.getZoom(true);
+  const threshold = GE.deepZoomThreshold || 5;
+
+  // Default behavior: keep the fast 4096px full-slide overlay.
+  // Only at deeper zoom levels do we redraw the currently visible region sharply.
+  if (zoom >= threshold) {
+    installGeneViewportCanvas();
+    requestGeneViewportRedraw();
+    if (GE.overlayCanvas) GE.overlayCanvas.style.visibility = 'visible';
+    if (GE.staticOverlayCanvas) GE.staticOverlayCanvas.style.visibility = 'hidden';
+  } else {
+    if (GE.overlayCanvas) GE.overlayCanvas.style.visibility = 'hidden';
+    if (GE.staticOverlayCanvas) GE.staticOverlayCanvas.style.visibility = 'visible';
+  }
+}
 
 function buildGeneSpatialGrid() {
   if (!GE.polygons?.cells?.length) {
@@ -4299,9 +4423,13 @@ function requestGeneViewportRedraw() {
 }
 
 function installGeneOverlayIntoOSD() {
+  installGeneStaticOverlayIntoOSD();
+
+  // Prepare the viewport canvas, but keep it hidden until deep zoom is reached.
   installGeneViewportCanvas();
+  if (GE.overlayCanvas) GE.overlayCanvas.style.visibility = 'hidden';
+
   updateGeneOverlayVisibility();
-  requestGeneViewportRedraw();
 }
 
 function buildGeneOverlayPaths() {
@@ -4650,7 +4778,14 @@ function geneValueColor(v) {
 }
 
 function requestGeneOverlayRedraw() {
-  requestGeneViewportRedraw();
+  if (GE.mode !== 'gene') return;
+
+  // Rebuild once when the gene, opacity, or alignment changes.
+  // Do not redraw continuously while the user is panning/zooming.
+  refreshGeneStaticOverlay();
+
+  // If already deeply zoomed in, refresh the sharp viewport layer once as well.
+  maybeRefreshGeneDeepZoom();
 }
 
 function drawGeneExpressionOverlay() {
