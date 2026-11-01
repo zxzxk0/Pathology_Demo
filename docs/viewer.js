@@ -38,56 +38,6 @@ async function loadHeDziMeta(slide) {
   const slideId = slide?.id || '';
   if (!slideId) return;
 
-  const metaUrl = `./data/tiles/${encodeURIComponent(slideId)}/dzi_meta.json`;
-
-  try {
-    const res = await fetch(metaUrl, { cache: 'no-store' });
-    if (res.ok) {
-      const meta = await res.json();
-
-      const originalW = Number(
-        meta.original_width ??
-        meta.originalW ??
-        meta.width ??
-        meta.image_width
-      );
-      const originalH = Number(
-        meta.original_height ??
-        meta.originalH ??
-        meta.height ??
-        meta.image_height
-      );
-      const dziW = Number(
-        meta.dzi_width ??
-        meta.dziW ??
-        meta.processed_width ??
-        meta.width
-      );
-
-      if (Number.isFinite(originalW) && originalW > 0) S.heOriginalW = originalW;
-      if (Number.isFinite(originalH) && originalH > 0) S.heOriginalH = originalH;
-
-      if (Number.isFinite(originalW) && originalW > 0 &&
-          Number.isFinite(dziW) && dziW > 0) {
-        S.heDziDownsample = originalW / dziW;
-      } else {
-        S.heDziDownsample = 1;
-      }
-
-      console.log('[H&E] DZI metadata:', {
-        source: 'dzi_meta.json',
-        originalW: S.heOriginalW,
-        originalH: S.heOriginalH,
-        downsample: S.heDziDownsample
-      });
-      return;
-    }
-
-    console.warn('[H&E] dzi_meta.json not found; falling back to DZI XML:', metaUrl);
-  } catch (e) {
-    console.warn('[H&E] failed to read dzi_meta.json; falling back to DZI XML:', e);
-  }
-
   try {
     const dziUrl = slide?.dzi_url ||
       `./data/tiles/${encodeURIComponent(slideId)}/${encodeURIComponent(slideId)}.dzi`;
@@ -98,7 +48,6 @@ async function loadHeDziMeta(slide) {
     const xmlText = await res.text();
     const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
     const sizeEl = doc.querySelector('Size');
-
     if (!sizeEl) throw new Error('DZI <Size> element missing');
 
     const dziW = Number(sizeEl.getAttribute('Width'));
@@ -108,19 +57,18 @@ async function loadHeDziMeta(slide) {
       throw new Error('Invalid DZI Width/Height');
     }
 
-    // Without a sidecar original-size file, use the DZI image frame directly.
     S.heOriginalW = dziW;
     S.heOriginalH = dziH;
     S.heDziDownsample = 1;
 
     console.log('[H&E] DZI metadata:', {
-      source: 'DZI XML fallback',
+      source: 'DZI XML',
       originalW: S.heOriginalW,
       originalH: S.heOriginalH,
       downsample: S.heDziDownsample
     });
   } catch (e) {
-    console.warn('[H&E] DZI metadata unavailable; using 1:1 annotation coordinates.', e);
+    console.warn('[H&E] DZI descriptor unavailable; using 1:1 annotation coordinates.', e);
     S.heDziDownsample = 1;
   }
 }
@@ -205,6 +153,7 @@ const GE = {
   overlayCanvas: null,
   pathsByType: null,
   overlayRasterW: 2048, // legacy; viewport renderer below no longer uses a fixed 2048px raster
+  polyTypeToExprType: null,
   spatialGrid: null,
   spatialGridSize: 1024,
   viewportRenderPending: false,
@@ -4274,6 +4223,20 @@ function drawGeneOverlayViewport() {
   const visible = _geneVisibleCellIndices(x0, y0, x1, y1);
   const colors = _geneTypeColors();
 
+  if (!GE._loggedViewportDiag) {
+    const mapped = (GE.polyTypeToExprType || []).filter(i => i >= 0).length;
+    console.log('[Gene Expression] viewport renderer:', {
+      visibleCells: visible.length,
+      polygonTypes: GE.polygons?.types?.length || 0,
+      expressionTypes: GE.expression?.types?.length || 0,
+      mappedTypes: mapped,
+      gene: GE.selectedGene,
+      heOriginalW: S.heOriginalW,
+      heOriginalH: S.heOriginalH
+    });
+    GE._loggedViewportDiag = true;
+  }
+
   // Convert H&E original pixel -> OSD viewer pixel for every vertex.
   const p = new OpenSeadragon.Point();
   const viewportPoint = new OpenSeadragon.Point();
@@ -4284,7 +4247,10 @@ function drawGeneOverlayViewport() {
     const coords = cell[2];
     if (!coords || coords.length < 6) continue;
 
-    const fill = colors[typeIdx];
+    const exprTypeIdx = GE.polyTypeToExprType?.[typeIdx] ?? typeIdx;
+    if (exprTypeIdx < 0) continue;
+
+    const fill = colors[exprTypeIdx];
     if (!fill || fill === 'rgba(255,255,255,0)') continue;
 
     ctx.beginPath();
@@ -4415,6 +4381,21 @@ async function loadGeneExpressionForSlide(slide) {
     GE.polygons = polygons;
     buildGeneSpatialGrid();
     GE.expression = expression;
+
+    // Robust mapping: polygon type index -> expression type index by type name.
+    // This remains correct even if polygon/expression JSON type arrays differ in order.
+    const exprTypeIndex = new Map((expression.types || []).map((name, i) => [String(name), i]));
+    GE.polyTypeToExprType = (polygons.types || []).map(name =>
+      exprTypeIndex.has(String(name)) ? exprTypeIndex.get(String(name)) : -1
+    );
+
+    const unmatchedTypes = (polygons.types || []).filter((name, i) => GE.polyTypeToExprType[i] < 0);
+    if (unmatchedTypes.length) {
+      console.warn('[Gene Expression] polygon types missing from expression data:', unmatchedTypes);
+    } else {
+      console.log('[Gene Expression] type mapping OK:', GE.polyTypeToExprType.length, 'types');
+    }
+
     loadSavedGeneOverlayAlignment(slide.id);
 
     const geneNames = Object.keys(expression.genes || {}).sort((a,b) => a.localeCompare(b));
@@ -4586,6 +4567,7 @@ function selectGeneExpression(gene) {
   }
 
   GE.selectedGene = gene;
+  GE._loggedViewportDiag = false;
   GE.currentGeneValues = GE.expression?.genes?.[gene] || [];
   const input = document.getElementById('geneSearch');
   if (input && input.value !== gene) input.value = gene;

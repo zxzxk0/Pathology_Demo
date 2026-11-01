@@ -976,8 +976,10 @@ body {
 <script src="./viewer.js"></script>
 
 <script>
-function onImgError(img) {
+function onImgError(which) {
   try {
+    const id = which === 'cosmx' ? 'cosmxThumb' : 'heThumb';
+    const img = document.getElementById(id);
     if (!img) return;
     img.onerror = null;
     img.style.display = 'none';
