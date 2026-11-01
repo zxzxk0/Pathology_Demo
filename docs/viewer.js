@@ -30,13 +30,21 @@ function getSlideDziUrl(slide) {
   return slide.dzi_url || slide.dzi || slide.tileSource || slide.tile_source || null;
 }
 
-async function loadHeDziMeta(slide) {
+async function loadHeDziMeta(slideOrId) {
   S.heDziDownsample = 1;
   S.heOriginalW = null;
   S.heOriginalH = null;
 
+  let slide = slideOrId;
+  if (typeof slideOrId === 'string') {
+    slide = (S.slides || []).find(s => s.id === slideOrId) || { id: slideOrId };
+  }
+
   const slideId = slide?.id || '';
-  if (!slideId) return;
+  if (!slideId) {
+    console.warn('[H&E] loadHeDziMeta called without a valid slide id');
+    return;
+  }
 
   try {
     const dziUrl = slide?.dzi_url ||
@@ -63,6 +71,7 @@ async function loadHeDziMeta(slide) {
 
     console.log('[H&E] DZI metadata:', {
       source: 'DZI XML',
+      slideId,
       originalW: S.heOriginalW,
       originalH: S.heOriginalH,
       downsample: S.heDziDownsample
@@ -1393,7 +1402,7 @@ async function loadSlide(slide) {
   if (typeof clearLymphocyteOverlay === 'function') clearLymphocyteOverlay(true);
 
   S.current = slide;
-  await loadHeDziMeta(slide.id);
+  await loadHeDziMeta(slide);
   await loadGeneExpressionForSlide(slide);
   S.rightBase = 'cosmx';
   S.rightHeDzi = getSlideDziUrl(slide);
@@ -4046,7 +4055,17 @@ function removeGeneOverlayFromOSD() {
 
 
 function buildGeneStaticOverlay() {
-  if (!GE.polygons || !GE.expression || !S.heOriginalW || !S.heOriginalH) return null;
+  if (!GE.polygons || !GE.expression) {
+    console.warn('[Gene Expression] static overlay skipped: gene data not ready');
+    return null;
+  }
+  if (!S.heOriginalW || !S.heOriginalH) {
+    console.warn('[Gene Expression] static overlay skipped: H&E dimensions missing', {
+      heOriginalW: S.heOriginalW,
+      heOriginalH: S.heOriginalH
+    });
+    return null;
+  }
 
   const rasterW = GE.overlayRasterW || 4096;
   const rasterH = Math.max(1, Math.round(rasterW * (S.heOriginalH / S.heOriginalW)));
@@ -4105,6 +4124,19 @@ function buildGeneStaticOverlay() {
   }
 
   ctx.globalAlpha = 1;
+
+  if (!GE._loggedStaticOverlayBuilt) {
+    console.log('[Gene Expression] static overlay built:', {
+      rasterW,
+      rasterH,
+      cells: GE.polygons?.cells?.length || 0,
+      gene: GE.selectedGene,
+      heOriginalW: S.heOriginalW,
+      heOriginalH: S.heOriginalH
+    });
+    GE._loggedStaticOverlayBuilt = true;
+  }
+
   return canvas;
 }
 
@@ -4695,6 +4727,7 @@ function selectGeneExpression(gene) {
   }
 
   GE.selectedGene = gene;
+  GE._loggedStaticOverlayBuilt = false;
   GE._loggedViewportDiag = false;
   GE.currentGeneValues = GE.expression?.genes?.[gene] || [];
   const input = document.getElementById('geneSearch');
