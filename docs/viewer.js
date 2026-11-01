@@ -4152,17 +4152,32 @@ function installGeneStaticOverlayIntoOSD() {
   const canvas = buildGeneStaticOverlay();
   if (!canvas) return;
 
-  canvas.style.width = '100%';
-  canvas.style.height = '100%';
   canvas.style.pointerEvents = 'none';
 
-  const aspect = S.heOriginalH / S.heOriginalW;
+  const item = viewer.world?.getItemAt(0);
+  if (!item) {
+    console.warn('[Gene Expression] no CosMx TiledImage available for overlay placement');
+    return;
+  }
+
+  const b = item.getBounds(true);
+
   viewer.addOverlay({
     element: canvas,
-    location: new OpenSeadragon.Rect(0, 0, 1, aspect)
+    location: new OpenSeadragon.Rect(b.x, b.y, b.width, b.height),
+    checkResize: false
   });
 
   GE.staticOverlayEl = canvas;
+
+  console.log('[Gene Expression] static overlay placement:', {
+    x: b.x,
+    y: b.y,
+    width: b.width,
+    height: b.height,
+    heOriginalW: S.heOriginalW,
+    heOriginalH: S.heOriginalH
+  });
 }
 
 function refreshGeneStaticOverlay() {
@@ -4268,17 +4283,22 @@ function _geneVisibleCellIndices(x0, y0, x1, y1) {
 
 function _geneViewportLevel0Bounds() {
   const viewer = S.osdCosMx;
-  if (!viewer || !S.heOriginalW || !S.heOriginalH) return null;
+  const item = viewer?.world?.getItemAt(0);
+  if (!viewer || !item || !S.heOriginalW || !S.heOriginalH) return null;
 
-  // The right viewer is explicitly placed into the H&E world coordinate frame
-  // by applyCosMxTransform(). Convert the visible viewport bounds into original
-  // H&E level-0 pixel coordinates.
   const vb = viewer.viewport.getBounds(true);
 
-  const x0 = vb.x * S.heOriginalW;
-  const y0 = vb.y * S.heOriginalW;
-  const x1 = (vb.x + vb.width) * S.heOriginalW;
-  const y1 = (vb.y + vb.height) * S.heOriginalW;
+  const tlImg = item.viewportToImageCoordinates(new OpenSeadragon.Point(vb.x, vb.y));
+  const brImg = item.viewportToImageCoordinates(
+    new OpenSeadragon.Point(vb.x + vb.width, vb.y + vb.height)
+  );
+
+  const content = item.getContentSize();
+
+  const x0 = tlImg.x * (S.heOriginalW / content.x);
+  const y0 = tlImg.y * (S.heOriginalH / content.y);
+  const x1 = brImg.x * (S.heOriginalW / content.x);
+  const y1 = brImg.y * (S.heOriginalH / content.y);
 
   return {
     x0: Math.max(0, Math.min(x0, x1)),
@@ -4393,9 +4413,9 @@ function drawGeneOverlayViewport() {
     GE._loggedViewportDiag = true;
   }
 
-  // Convert H&E original pixel -> OSD viewer pixel for every vertex.
-  const p = new OpenSeadragon.Point();
-  const viewportPoint = new OpenSeadragon.Point();
+  // Convert H&E original pixels through the transformed CosMx TiledImage.
+  const item = viewer.world?.getItemAt(0);
+  if (!item) return;
 
   for (const idx of visible) {
     const cell = GE.polygons.cells[idx];
@@ -4415,11 +4435,13 @@ function drawGeneOverlayViewport() {
       const hx = coords[k] + (GE.offsetX || 0);
       const hy = coords[k + 1] + (GE.offsetY || 0);
 
-      // H&E world coordinates use image width as the normalized denominator.
-      viewportPoint.x = hx / S.heOriginalW;
-      viewportPoint.y = hy / S.heOriginalW;
-
-      const pix = viewer.viewport.pixelFromPoint(viewportPoint, true);
+      const content = item.getContentSize();
+      const imagePt = new OpenSeadragon.Point(
+        hx * (content.x / S.heOriginalW),
+        hy * (content.y / S.heOriginalH)
+      );
+      const viewportPt = item.imageToViewportCoordinates(imagePt);
+      const pix = viewer.viewport.pixelFromPoint(viewportPt, true);
       const px = pix.x * dpr;
       const py = pix.y * dpr;
 
