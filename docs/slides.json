@@ -1,17 +1,17 @@
 [
   {
     "id": "3_10_9baaf19a-431a-9246-f5f7-7031e118105f_154434",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_10_9baaf19a-431a-9246-f5f7-7031e118105f_154434/3_10_9baaf19a-431a-9246-f5f7-7031e118105f_154434.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_10_9baaf19a-431a-9246-f5f7-7031e118105f_154434/3_10_9baaf19a-431a-9246-f5f7-7031e118105f_154434.dzi",
     "cosmx": {
       "has_cosmx": false
     }
   },
   {
     "id": "3_12_edd069bb-1083-5023-7272-190a66373fc3_155005",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_12_edd069bb-1083-5023-7272-190a66373fc3_155005/3_12_edd069bb-1083-5023-7272-190a66373fc3_155005.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_12_edd069bb-1083-5023-7272-190a66373fc3_155005/3_12_edd069bb-1083-5023-7272-190a66373fc3_155005.dzi",
     "cosmx": {
       "has_cosmx": true,
-      "dzi_url": "/Pathology_Demo/data/cosmx_tiles/3_12_edd069bb-1083-5023-7272-190a66373fc3_155005/3_12_edd069bb-1083-5023-7272-190a66373fc3_155005_registered.dzi",
+      "dzi_url": "/annotation_app/data/cosmx_tiles/3_12_edd069bb-1083-5023-7272-190a66373fc3_155005/3_12_edd069bb-1083-5023-7272-190a66373fc3_155005.dzi",
       "registered": true,
       "transform": {
         "rotation": 90,
@@ -26,45 +26,11 @@
     }
   },
   {
-    "id": "PreSCCT1_HE.ome",
-    "dzi_url": "/Pathology_Demo/data/tiles/PreSCCT1_HE.ome/PreSCCT1_HE.ome.dzi",
-    "cosmx": {
-      "has_cosmx": true,
-      "dzi_url": "/Pathology_Demo/data/cosmx_tiles/PreSCCT1_HE.ome/PreSCCT1_HE.ome.dzi",
-      "registered": true,
-      "transform": {
-        "rotation": 0,
-        "flipX": false,
-        "flipY": false,
-        "translateX": -0.021645021645021644,
-        "translateY": 0.0078125,
-        "translateX_pixels": -10,
-        "translateY_pixels": 8,
-        "scale": 0.9820150000000003
-      },
-      "original_sizes": {
-        "he": [
-          37482,
-          82972
-        ],
-        "cosmx": [
-          37482,
-          82972
-        ]
-      }
-    },
-    "gene_expression": {
-      "polygons_url": "./data/gene_expression/PreSCCT1_HE.ome/cell_polygons.json",
-      "expression_url": "./data/gene_expression/PreSCCT1_HE.ome/gene_expression.json",
-      "coordinate_space": "he_level0_px"
-    }
-  },
-  {
     "id": "3_13_fc7e338b-417c-0b22-4786-f43048459ceb_155215",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_13_fc7e338b-417c-0b22-4786-f43048459ceb_155215/3_13_fc7e338b-417c-0b22-4786-f43048459ceb_155215.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_13_fc7e338b-417c-0b22-4786-f43048459ceb_155215/3_13_fc7e338b-417c-0b22-4786-f43048459ceb_155215.dzi",
     "cosmx": {
       "has_cosmx": true,
-      "dzi_url": "/Pathology_Demo/data/cosmx_tiles/3_13_fc7e338b-417c-0b22-4786-f43048459ceb_155215/3_13_fc7e338b-417c-0b22-4786-f43048459ceb_155215_registered.dzi",
+      "dzi_url": "/annotation_app/data/cosmx_tiles/3_13_fc7e338b-417c-0b22-4786-f43048459ceb_155215/3_13_fc7e338b-417c-0b22-4786-f43048459ceb_155215.dzi",
       "registered": true,
       "transform": {
         "rotation": 90,
@@ -80,10 +46,10 @@
   },
   {
     "id": "3_14_190832f7-70a5-52f3-50b7-851f8dcfaae2_155448",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_14_190832f7-70a5-52f3-50b7-851f8dcfaae2_155448/3_14_190832f7-70a5-52f3-50b7-851f8dcfaae2_155448.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_14_190832f7-70a5-52f3-50b7-851f8dcfaae2_155448/3_14_190832f7-70a5-52f3-50b7-851f8dcfaae2_155448.dzi",
     "cosmx": {
       "has_cosmx": true,
-      "dzi_url": "/Pathology_Demo/data/cosmx_tiles/3_14_190832f7-70a5-52f3-50b7-851f8dcfaae2_155448/3_14_190832f7-70a5-52f3-50b7-851f8dcfaae2_155448_registered.dzi",
+      "dzi_url": "/annotation_app/data/cosmx_tiles/3_14_190832f7-70a5-52f3-50b7-851f8dcfaae2_155448/3_14_190832f7-70a5-52f3-50b7-851f8dcfaae2_155448.dzi",
       "registered": true,
       "transform": {
         "rotation": 90,
@@ -99,10 +65,10 @@
   },
   {
     "id": "3_15_6abcd789-9ae7-0d8a-e4db-e306b5727df4_155648",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_15_6abcd789-9ae7-0d8a-e4db-e306b5727df4_155648/3_15_6abcd789-9ae7-0d8a-e4db-e306b5727df4_155648.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_15_6abcd789-9ae7-0d8a-e4db-e306b5727df4_155648/3_15_6abcd789-9ae7-0d8a-e4db-e306b5727df4_155648.dzi",
     "cosmx": {
       "has_cosmx": true,
-      "dzi_url": "/Pathology_Demo/data/cosmx_tiles/3_15_6abcd789-9ae7-0d8a-e4db-e306b5727df4_155648/3_15_6abcd789-9ae7-0d8a-e4db-e306b5727df4_155648_registered.dzi",
+      "dzi_url": "/annotation_app/data/cosmx_tiles/3_15_6abcd789-9ae7-0d8a-e4db-e306b5727df4_155648/3_15_6abcd789-9ae7-0d8a-e4db-e306b5727df4_155648.dzi",
       "registered": true,
       "transform": {
         "rotation": 90,
@@ -118,10 +84,10 @@
   },
   {
     "id": "3_16_e5e4e83e-46ca-ee7d-7f64-46f5ba0b0183_155845",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_16_e5e4e83e-46ca-ee7d-7f64-46f5ba0b0183_155845/3_16_e5e4e83e-46ca-ee7d-7f64-46f5ba0b0183_155845.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_16_e5e4e83e-46ca-ee7d-7f64-46f5ba0b0183_155845/3_16_e5e4e83e-46ca-ee7d-7f64-46f5ba0b0183_155845.dzi",
     "cosmx": {
       "has_cosmx": true,
-      "dzi_url": "/Pathology_Demo/data/cosmx_tiles/3_16_e5e4e83e-46ca-ee7d-7f64-46f5ba0b0183_155845/3_16_e5e4e83e-46ca-ee7d-7f64-46f5ba0b0183_155845_registered.dzi",
+      "dzi_url": "/annotation_app/data/cosmx_tiles/3_16_e5e4e83e-46ca-ee7d-7f64-46f5ba0b0183_155845/3_16_e5e4e83e-46ca-ee7d-7f64-46f5ba0b0183_155845.dzi",
       "registered": true,
       "transform": {
         "rotation": 0,
@@ -137,10 +103,10 @@
   },
   {
     "id": "3_17_e5ecd251-609b-7ca5-cdcf-12a76adc70de_160012",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_17_e5ecd251-609b-7ca5-cdcf-12a76adc70de_160012/3_17_e5ecd251-609b-7ca5-cdcf-12a76adc70de_160012.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_17_e5ecd251-609b-7ca5-cdcf-12a76adc70de_160012/3_17_e5ecd251-609b-7ca5-cdcf-12a76adc70de_160012.dzi",
     "cosmx": {
       "has_cosmx": true,
-      "dzi_url": "/Pathology_Demo/data/cosmx_tiles/3_17_e5ecd251-609b-7ca5-cdcf-12a76adc70de_160012/3_17_e5ecd251-609b-7ca5-cdcf-12a76adc70de_160012.dzi",
+      "dzi_url": "/annotation_app/data/cosmx_tiles/3_17_e5ecd251-609b-7ca5-cdcf-12a76adc70de_160012/3_17_e5ecd251-609b-7ca5-cdcf-12a76adc70de_160012.dzi",
       "registered": true,
       "transform": {
         "rotation": 90,
@@ -156,10 +122,10 @@
   },
   {
     "id": "3_18_1ed35fb5-f264-11cd-b4de-f349af3ea4ab_160205",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_18_1ed35fb5-f264-11cd-b4de-f349af3ea4ab_160205/3_18_1ed35fb5-f264-11cd-b4de-f349af3ea4ab_160205.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_18_1ed35fb5-f264-11cd-b4de-f349af3ea4ab_160205/3_18_1ed35fb5-f264-11cd-b4de-f349af3ea4ab_160205.dzi",
     "cosmx": {
       "has_cosmx": true,
-      "dzi_url": "/Pathology_Demo/data/cosmx_tiles/3_18_1ed35fb5-f264-11cd-b4de-f349af3ea4ab_160205/3_18_1ed35fb5-f264-11cd-b4de-f349af3ea4ab_160205_registered.dzi",
+      "dzi_url": "/annotation_app/data/cosmx_tiles/3_18_1ed35fb5-f264-11cd-b4de-f349af3ea4ab_160205/3_18_1ed35fb5-f264-11cd-b4de-f349af3ea4ab_160205.dzi",
       "registered": true,
       "transform": {
         "rotation": 0,
@@ -175,10 +141,10 @@
   },
   {
     "id": "3_19_bdc3dc21-6e16-faa2-65ba-b9b593835173_160447",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_19_bdc3dc21-6e16-faa2-65ba-b9b593835173_160447/3_19_bdc3dc21-6e16-faa2-65ba-b9b593835173_160447.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_19_bdc3dc21-6e16-faa2-65ba-b9b593835173_160447/3_19_bdc3dc21-6e16-faa2-65ba-b9b593835173_160447.dzi",
     "cosmx": {
       "has_cosmx": true,
-      "dzi_url": "/Pathology_Demo/data/cosmx_tiles/3_19_bdc3dc21-6e16-faa2-65ba-b9b593835173_160447/3_19_bdc3dc21-6e16-faa2-65ba-b9b593835173_160447_registered.dzi",
+      "dzi_url": "/annotation_app/data/cosmx_tiles/3_19_bdc3dc21-6e16-faa2-65ba-b9b593835173_160447/3_19_bdc3dc21-6e16-faa2-65ba-b9b593835173_160447.dzi",
       "registered": true,
       "transform": {
         "rotation": 90,
@@ -194,24 +160,24 @@
   },
   {
     "id": "3_1_5cdf43e2-6dbf-19c2-3e41-fb0c0b068e56_152657",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_1_5cdf43e2-6dbf-19c2-3e41-fb0c0b068e56_152657/3_1_5cdf43e2-6dbf-19c2-3e41-fb0c0b068e56_152657.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_1_5cdf43e2-6dbf-19c2-3e41-fb0c0b068e56_152657/3_1_5cdf43e2-6dbf-19c2-3e41-fb0c0b068e56_152657.dzi",
     "cosmx": {
       "has_cosmx": false
     }
   },
   {
     "id": "3_20_9a4bba0f-9246-2b4f-1bce-526528f4587c_160715",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_20_9a4bba0f-9246-2b4f-1bce-526528f4587c_160715/3_20_9a4bba0f-9246-2b4f-1bce-526528f4587c_160715.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_20_9a4bba0f-9246-2b4f-1bce-526528f4587c_160715/3_20_9a4bba0f-9246-2b4f-1bce-526528f4587c_160715.dzi",
     "cosmx": {
       "has_cosmx": false
     }
   },
   {
     "id": "3_2_cc5f738f-5a6e-83f1-8019-d4f484c158d6_152921",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_2_cc5f738f-5a6e-83f1-8019-d4f484c158d6_152921/3_2_cc5f738f-5a6e-83f1-8019-d4f484c158d6_152921.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_2_cc5f738f-5a6e-83f1-8019-d4f484c158d6_152921/3_2_cc5f738f-5a6e-83f1-8019-d4f484c158d6_152921.dzi",
     "cosmx": {
       "has_cosmx": true,
-      "dzi_url": "/Pathology_Demo/data/cosmx_tiles/3_2_cc5f738f-5a6e-83f1-8019-d4f484c158d6_152921/3_2_cc5f738f-5a6e-83f1-8019-d4f484c158d6_152921.dzi",
+      "dzi_url": "/annotation_app/data/cosmx_tiles/3_2_cc5f738f-5a6e-83f1-8019-d4f484c158d6_152921/3_2_cc5f738f-5a6e-83f1-8019-d4f484c158d6_152921.dzi",
       "registered": true,
       "transform": {
         "rotation": 90,
@@ -227,17 +193,17 @@
   },
   {
     "id": "3_3_38977812-4f83-d32d-e66e-df74c46aa63a_153122",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_3_38977812-4f83-d32d-e66e-df74c46aa63a_153122/3_3_38977812-4f83-d32d-e66e-df74c46aa63a_153122.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_3_38977812-4f83-d32d-e66e-df74c46aa63a_153122/3_3_38977812-4f83-d32d-e66e-df74c46aa63a_153122.dzi",
     "cosmx": {
       "has_cosmx": false
     }
   },
   {
     "id": "3_4_81f5958c-a17d-1b21-319e-8246eaea2242_153255",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_4_81f5958c-a17d-1b21-319e-8246eaea2242_153255/3_4_81f5958c-a17d-1b21-319e-8246eaea2242_153255.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_4_81f5958c-a17d-1b21-319e-8246eaea2242_153255/3_4_81f5958c-a17d-1b21-319e-8246eaea2242_153255.dzi",
     "cosmx": {
       "has_cosmx": true,
-      "dzi_url": "/Pathology_Demo/data/cosmx_tiles/3_4_81f5958c-a17d-1b21-319e-8246eaea2242_153255/3_4_81f5958c-a17d-1b21-319e-8246eaea2242_153255.dzi",
+      "dzi_url": "/annotation_app/data/cosmx_tiles/3_4_81f5958c-a17d-1b21-319e-8246eaea2242_153255/3_4_81f5958c-a17d-1b21-319e-8246eaea2242_153255.dzi",
       "registered": true,
       "transform": {
         "rotation": 90,
@@ -253,10 +219,10 @@
   },
   {
     "id": "3_5_edb0bd50-fac4-2d11-0885-67ff38c6ab11_153437",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_5_edb0bd50-fac4-2d11-0885-67ff38c6ab11_153437/3_5_edb0bd50-fac4-2d11-0885-67ff38c6ab11_153437.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_5_edb0bd50-fac4-2d11-0885-67ff38c6ab11_153437/3_5_edb0bd50-fac4-2d11-0885-67ff38c6ab11_153437.dzi",
     "cosmx": {
       "has_cosmx": true,
-      "dzi_url": "/Pathology_Demo/data/cosmx_tiles/3_5_edb0bd50-fac4-2d11-0885-67ff38c6ab11_153437/3_5_edb0bd50-fac4-2d11-0885-67ff38c6ab11_153437_registered.dzi",
+      "dzi_url": "/annotation_app/data/cosmx_tiles/3_5_edb0bd50-fac4-2d11-0885-67ff38c6ab11_153437/3_5_edb0bd50-fac4-2d11-0885-67ff38c6ab11_153437.dzi",
       "registered": true,
       "transform": {
         "rotation": 0,
@@ -272,10 +238,10 @@
   },
   {
     "id": "3_6_3f4bd19c-3831-031f-89dd-c69a43d2fdd5_153646",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_6_3f4bd19c-3831-031f-89dd-c69a43d2fdd5_153646/3_6_3f4bd19c-3831-031f-89dd-c69a43d2fdd5_153646.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_6_3f4bd19c-3831-031f-89dd-c69a43d2fdd5_153646/3_6_3f4bd19c-3831-031f-89dd-c69a43d2fdd5_153646.dzi",
     "cosmx": {
       "has_cosmx": true,
-      "dzi_url": "/Pathology_Demo/data/cosmx_tiles/3_6_3f4bd19c-3831-031f-89dd-c69a43d2fdd5_153646/3_6_3f4bd19c-3831-031f-89dd-c69a43d2fdd5_153646_registered.dzi",
+      "dzi_url": "/annotation_app/data/cosmx_tiles/3_6_3f4bd19c-3831-031f-89dd-c69a43d2fdd5_153646/3_6_3f4bd19c-3831-031f-89dd-c69a43d2fdd5_153646.dzi",
       "registered": true,
       "transform": {
         "rotation": 90,
@@ -291,10 +257,10 @@
   },
   {
     "id": "3_7_edee787a-2318-5c90-bdd1-058a5b3cc54d_153828",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_7_edee787a-2318-5c90-bdd1-058a5b3cc54d_153828/3_7_edee787a-2318-5c90-bdd1-058a5b3cc54d_153828.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_7_edee787a-2318-5c90-bdd1-058a5b3cc54d_153828/3_7_edee787a-2318-5c90-bdd1-058a5b3cc54d_153828.dzi",
     "cosmx": {
       "has_cosmx": true,
-      "dzi_url": "/Pathology_Demo/data/cosmx_tiles/3_7_edee787a-2318-5c90-bdd1-058a5b3cc54d_153828/3_7_edee787a-2318-5c90-bdd1-058a5b3cc54d_153828.dzi",
+      "dzi_url": "/annotation_app/data/cosmx_tiles/3_7_edee787a-2318-5c90-bdd1-058a5b3cc54d_153828/3_7_edee787a-2318-5c90-bdd1-058a5b3cc54d_153828.dzi",
       "registered": true,
       "transform": {
         "rotation": 90,
@@ -310,10 +276,10 @@
   },
   {
     "id": "3_8_3792918c-5a59-9910-b304-d7d7049e36e0_154003",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_8_3792918c-5a59-9910-b304-d7d7049e36e0_154003/3_8_3792918c-5a59-9910-b304-d7d7049e36e0_154003.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_8_3792918c-5a59-9910-b304-d7d7049e36e0_154003/3_8_3792918c-5a59-9910-b304-d7d7049e36e0_154003.dzi",
     "cosmx": {
       "has_cosmx": true,
-      "dzi_url": "/Pathology_Demo/data/cosmx_tiles/3_8_3792918c-5a59-9910-b304-d7d7049e36e0_154003/3_8_3792918c-5a59-9910-b304-d7d7049e36e0_154003.dzi",
+      "dzi_url": "/annotation_app/data/cosmx_tiles/3_8_3792918c-5a59-9910-b304-d7d7049e36e0_154003/3_8_3792918c-5a59-9910-b304-d7d7049e36e0_154003.dzi",
       "registered": true,
       "transform": {
         "rotation": 90,
@@ -329,10 +295,10 @@
   },
   {
     "id": "3_9_8904e483-a341-fa4c-075d-91eff84a3843_154223",
-    "dzi_url": "/Pathology_Demo/data/tiles/3_9_8904e483-a341-fa4c-075d-91eff84a3843_154223/3_9_8904e483-a341-fa4c-075d-91eff84a3843_154223.dzi",
+    "dzi_url": "/annotation_app/data/tiles/3_9_8904e483-a341-fa4c-075d-91eff84a3843_154223/3_9_8904e483-a341-fa4c-075d-91eff84a3843_154223.dzi",
     "cosmx": {
       "has_cosmx": true,
-      "dzi_url": "/Pathology_Demo/data/cosmx_tiles/3_9_8904e483-a341-fa4c-075d-91eff84a3843_154223/3_9_8904e483-a341-fa4c-075d-91eff84a3843_154223_registered.dzi",
+      "dzi_url": "/annotation_app/data/cosmx_tiles/3_9_8904e483-a341-fa4c-075d-91eff84a3843_154223/3_9_8904e483-a341-fa4c-075d-91eff84a3843_154223.dzi",
       "registered": true,
       "transform": {
         "rotation": 90,
@@ -348,7 +314,7 @@
   },
   {
     "id": "M18xMV8INjJfMTU0ODMx",
-    "dzi_url": "/Pathology_Demo/data/tiles/M18xMV8INjJfMTU0ODMx/M18xMV8INjJfMTU0ODMx.dzi",
+    "dzi_url": "/annotation_app/data/tiles/M18xMV8INjJfMTU0ODMx/M18xMV8INjJfMTU0ODMx.dzi",
     "cosmx": {
       "has_cosmx": false
     }
