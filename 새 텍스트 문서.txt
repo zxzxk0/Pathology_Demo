@@ -10,7 +10,7 @@ cd E:\Pathology_Demo
 
 python generate_manifest.py
 
-cd E:\Pathology_Demo
+cd C:\Users\zxzxk\Downloads\Pathology_Demo
 
 git add -A
 
